@@ -1,0 +1,15 @@
+blinker==1.9.0
+click==8.2.0
+colorama==0.4.6
+Flask==2.2.0
+Flask-SQLAlchemy==3.0.1
+greenlet==3.2.2
+itsdangerous==2.2.0
+Jinja2==3.1.6
+MarkupSafe==3.0.2
+opencv-python-headless==4.7.0.72
+plotly==5.10.0
+SQLAlchemy==1.4.49
+tenacity==9.1.2
+typing_extensions==4.13.2
+Werkzeug==2.3.8
