@@ -377,6 +377,7 @@
                 .then(data => {
                     const turbidity = data.turbidity;
                     const temperature = data.temperature;
+                    const conductivity = data.conductivity;
                     const timestamp = new Date(data.timestamp);
                     const isConnected = data.connected;
                     
@@ -384,7 +385,8 @@
                     document.getElementById('turbidityValue').textContent = 
                         `${turbidity.toFixed(2)} NTU`;
                     document.getElementById('tempValue').textContent = `${temperature.toFixed(2)} °C`;
-                    
+                    document.getElementById('conductivityValue').textContent = `${conductivity.toFixed(2)} mS/cm`;
+                    document.getElementById('salinityValue').textContent = `${(conductivity * 0.64).toFixed(2)} PSU`;                    
                     // Update connection status
                     const statusDot = document.querySelector('#arduinoStatus .status-dot');
                     const statusText = document.querySelector('#arduinoStatus span:last-child');
@@ -415,16 +417,11 @@
         // Function to update simulated data and graphs
         function updateDashboard() {
             // Generate simulated values for other parameters
-            const simulatedConductivity = (Math.random() * 50 + 20).toFixed(0);
             const simulatedLat = 40.7128 + (Math.random() - 0.5) * 0.01;
             const simulatedLon = -74.0060 + (Math.random() - 0.5) * 0.01;
             const simulatedAltitude = (Math.random() * 50 + 30).toFixed(0);
             
-            // Update other values
-            document.getElementById('conductivityValue').textContent = 
-                `${simulatedConductivity} mS/cm`;
-            document.getElementById('salinityValue').textContent = 
-                `${(simulatedConductivity * 0.0064).toFixed(2)} PSU`;
+            // Update other value
             document.getElementById('gpsValue').textContent = 
                 `${simulatedLat.toFixed(4)}, ${simulatedLon.toFixed(4)}`;
             document.getElementById('altitudeValue').textContent = 

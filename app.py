@@ -12,12 +12,12 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sensors.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# Logging setup
+# Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('ArduinoDashboard')
 
-# Serial config
-SERIAL_PORT = 'COM8'
+# Serial Setup
+SERIAL_PORT = 'COM8'  # Update this if needed
 BAUD_RATE = 9600
 ser = None
 try:
@@ -30,11 +30,12 @@ except Exception as e:
 # Globals
 latest_turbidity = 0.0
 latest_temperature = 0.0
+latest_conductivity = 0.0
 last_update = None
 first_connection_time = None
 data_lock = threading.Lock()
 
-# DB model
+# Database model
 class SensorData(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
@@ -44,44 +45,56 @@ class SensorData(db.Model):
     latitude = db.Column(db.Float)
     longitude = db.Column(db.Float)
 
-# Serial reading thread
+# Serial read thread
 def serial_reader():
-    global latest_turbidity, latest_temperature, last_update, first_connection_time
+    global latest_turbidity, latest_temperature, latest_conductivity, last_update, first_connection_time
     while True:
         if ser and ser.is_open:
             try:
                 line = ser.readline().decode('utf-8').strip()
-                if line.startswith("TURBIDITY:") and "TEMPERATURE:" in line:
+                if line.startswith("TURBIDITY:"):
                     parts = line.split(";")
-                    turbidity_val = float(parts[0].split(":")[1])
-                    temperature_val = float(parts[1].split(":")[1])
+                    values = {}
+                    for part in parts:
+                        key_val = part.strip().split(":")
+                        if len(key_val) == 2:
+                            key = key_val[0].strip()
+                            val = key_val[1].strip()
+                            # Remove units like 'NTU', '°C', 'ppm', 'mS/cm'
+                            clean_val = ''.join([c for c in val if (c.isdigit() or c == '.' or c == '-')])
+                            values[key] = clean_val
 
                     with data_lock:
-                        latest_turbidity = turbidity_val
-                        latest_temperature = temperature_val
+                        latest_turbidity = float(values.get("TURBIDITY", 0))
+                        latest_temperature = float(values.get("TEMPERATURE", 0))
+                        latest_conductivity = float(values.get("EC", 0))
                         now = datetime.now()
                         last_update = now
                         if not first_connection_time:
                             first_connection_time = now
                             logger.info(f"Arduino first connected at: {first_connection_time}")
+
+                    logger.info(f"Read -> Turbidity: {latest_turbidity}, Temp: {latest_temperature}, EC: {latest_conductivity}")
             except Exception as e:
                 logger.error(f"Serial read error: {str(e)}")
         time.sleep(1)
 
-# Generate mixed data (real + simulated)
+
+# Generate data for logging (real + GPS)
 def generate_sensor_data():
     with data_lock:
         turbidity_val = latest_turbidity
         temperature_val = latest_temperature
+        conductivity_val = latest_conductivity
     return {
         'turbidity': round(turbidity_val, 2),
         'temperature': round(temperature_val, 2),
-        'conductivity': round(random.uniform(52, 58), 2),  # Only simulated
+        'conductivity': round(conductivity_val, 2),
         'latitude': round(4.2105 + random.uniform(-0.01, 0.01), 6),
         'longitude': round(6.4375 + random.uniform(-0.01, 0.01), 6)
     }
 
-# Log every 3 seconds
+# Logger every 3 seconds
 def sensor_logger():
     while True:
         time.sleep(3)
@@ -111,6 +124,7 @@ def get_real_time_data():
         return jsonify({
             'turbidity': latest_turbidity,
             'temperature': latest_temperature,
+            'conductivity': latest_conductivity,
             'timestamp': last_update.isoformat() if last_update else None,
             'connected': ser is not None and ser.is_open
         })
@@ -149,7 +163,7 @@ def video_feed():
     return Response(generate_camera_frames(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
-# Startup
+# Run
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
