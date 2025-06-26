@@ -1,489 +1,729 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Drone Water Analysis Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Roboto', sans-serif;
-        }
-
-        body {
-            background: #f0f2f5;
-            min-height: 100vh;
-        }
-
-        .header {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            background: linear-gradient(135deg, #2c3e50, #1a2530);
-            padding: 30px 20px;
-            width: 100%;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        }
-
-        .app-title {
-            font-size: 2.2rem;
-            margin-bottom: 1.5rem;
-            color: #ecf0f1;
-            text-align: center;
-            font-weight: 500;
-            letter-spacing: 0.5px;
-            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.2);
-        }
-
-        .nav-menu {
-            display: flex;
-            gap: 15px;
-        }
-
-        .nav-btn {
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: #ecf0f1;
-            padding: 12px 25px;
-            text-align: center;
-            border-radius: 30px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-weight: 500;
-            font-size: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .nav-btn:hover {
-            background: rgba(52, 152, 219, 0.8);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-        }
-
-        .nav-btn.active {
-            background: #3498db;
-            color: white;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-        }
-
-        .main-content {
-            padding: 30px;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        .content-section {
-            display: none;
-            background: white;
-            border-radius: 12px;
-            padding: 25px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-            margin-top: 25px;
-        }
-
-        .content-section.active {
-            display: block;
-            animation: fadeIn 0.5s ease;
-        }
-
-        .graph-container {
-            height: 500px;
-            margin-top: 20px;
-            border-radius: 8px;
-            overflow: hidden;
-            background: white;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-        }
-
-        .camera-container {
-            position: relative;
-            background: #000;
-            border-radius: 8px;
-            overflow: hidden;
-            margin-top: 20px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
-        }
-
-        .camera-feed {
-            width: 100%;
-            display: block;
-        }
-
-        .gps-overlay {
-            position: absolute;
-            bottom: 15px;
-            left: 15px;
-            background: rgba(0, 0, 0, 0.75);
-            color: white;
-            padding: 10px 18px;
-            border-radius: 6px;
-            font-size: 1.1rem;
-            z-index: 1000;
-            font-weight: 500;
-            backdrop-filter: blur(2px);
-        }
-
-        .map-container {
-            height: 500px;
-            border-radius: 8px;
-            overflow: hidden;
-            margin-top: 20px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-        }
-
-        #map {
-            height: 100%;
-            width: 100%;
-            background: #e8eaed;
-        }
-
-        .sensor-cards {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 20px;
-            margin-top: 20px;
-        }
-
-        .card {
-            background: white;
-            padding: 22px;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-            border-left: 5px solid #3498db;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
-        }
-
-        .conductivity-card {
-            border-left-color: #4CAF50;
-        }
-
-        .turbidity-card {
-            border-left-color: #2196F3;
-        }
-
-        .card h3 {
-            color: #2c3e50;
-            margin-bottom: 15px;
-            font-size: 1.2rem;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .value {
-            font-size: 2rem;
-            color: #2c3e50;
-            font-weight: 500;
-            margin: 10px 0;
-        }
-
-        .sub-value {
-            color: #7f8c8d;
-            font-size: 1.05rem;
-            margin-top: 8px;
-        }
-        
-        .section-title {
-            color: #2c3e50;
-            font-size: 1.8rem;
-            margin-bottom: 15px;
-            font-weight: 500;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #ecf0f1;
-        }
-        
-        .map-placeholder {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            color: #7f8c8d;
-            font-size: 1.2rem;
-            background: #f8f9fa;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .status-indicator {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: #4CAF50;
-            margin-left: 8px;
-            box-shadow: 0 0 8px #4CAF50;
-            animation: pulse 1.5s infinite;
-        }
-        
-        @keyframes pulse {
-            0% { opacity: 0.6; }
-            50% { opacity: 1; }
-            100% { opacity: 0.6; }
-        }
-        
-        .connection-status {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            font-size: 0.9rem;
-            margin-top: 5px;
-        }
-        
-        .status-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            display: inline-block;
-        }
-        
-        .connected {
-            background-color: #4CAF50;
-            box-shadow: 0 0 8px #4CAF50;
-        }
-        
-        .disconnected {
-            background-color: #f44336;
-        }
-        
-        .update-info {
-            text-align: right;
-            color: #7f8c8d;
-            font-size: 0.9rem;
-            margin-top: 10px;
-        }
-
-        @media (max-width: 768px) {
-            .nav-menu {
-                flex-wrap: wrap;
-                justify-content: center;
-            }
-            
-            .main-content {
-                padding: 20px 15px;
-            }
-            
-            .graph-container,
-            .map-container {
-                height: 350px;
-            }
-            
-            .app-title {
-                font-size: 1.8rem;
-            }
-            
-            .section-title {
-                font-size: 1.5rem;
-            }
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Drone Water Analysis Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Roboto', sans-serif;
+    }
+    
+    body {
+      background-color: #f0f4f8;
+      color: #333;
+      line-height: 1.6;
+    }
+    
+    .header {
+      background: linear-gradient(135deg, #0f4c75, #3282b8);
+      color: white;
+      padding: 1.5rem 2rem;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    
+    .app-title {
+      font-weight: 500;
+      font-size: 1.8rem;
+      margin-bottom: 1.2rem;
+      text-align: center;
+    }
+    
+    .nav-menu {
+      display: flex;
+      justify-content: center;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+    
+    .nav-btn {
+      background: rgba(255, 255, 255, 0.15);
+      border: none;
+      color: white;
+      padding: 0.8rem 1.5rem;
+      border-radius: 30px;
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.3s ease;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    .nav-btn:hover {
+      background: rgba(255, 255, 255, 0.25);
+      transform: translateY(-2px);
+    }
+    
+    .nav-btn.active {
+      background: white;
+      color: #0f4c75;
+      font-weight: 500;
+    }
+    
+    .main-content {
+      max-width: 1400px;
+      margin: 2rem auto;
+      padding: 0 2rem;
+    }
+    
+    .section-title {
+      font-size: 1.5rem;
+      color: #0f4c75;
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid #bbe1fa;
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+    }
+    
+    .status-indicator {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #4CAF50;
+      margin-left: 0.5rem;
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0% { opacity: 0.7; }
+      50% { opacity: 1; }
+      100% { opacity: 0.7; }
+    }
+    
+    .sensor-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2.5rem;
+    }
+    
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+      transition: transform 0.3s ease;
+    }
+    
+    .card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+    }
+    
+    .turbidity-card {
+      position: relative;
+    }
+    
+    .conductivity-card {
+      position: relative;
+    }
+    
+    .card h3 {
+      font-size: 1.2rem;
+      margin-bottom: 1rem;
+      color: #1b262c;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .card .value {
+      font-size: 1.8rem;
+      font-weight: 500;
+      margin-bottom: 0.5rem;
+    }
+    
+    .card .sub-value {
+      color: #666;
+      font-size: 0.95rem;
+    }
+    
+    .connection-status {
+      position: absolute;
+      bottom: 1rem;
+      right: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      color: #666;
+    }
+    
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    
+    .status-dot.connected {
+      background: #4CAF50;
+      animation: pulse 2s infinite;
+    }
+    
+    .status-dot.disconnected {
+      background: #f44336;
+    }
+    
+    .content-section {
+      display: none;
+    }
+    
+    .content-section.active {
+      display: block;
+      animation: fadeIn 0.5s ease;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .update-info {
+      text-align: right;
+      color: #666;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+    }
+    
+    .graph-container {
+      background: white;
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+      margin-bottom: 2rem;
+      height: 400px;
+    }
+    
+    .peak-log-section {
+      background: white;
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+      margin-bottom: 2rem;
+    }
+    
+    .peak-log-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    
+    .peak-log-table th {
+      background-color: #0f4c75;
+      color: white;
+      text-align: left;
+      padding: 0.8rem 1rem;
+      font-weight: 500;
+    }
+    
+    .peak-log-table td {
+      padding: 0.8rem 1rem;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .peak-log-table tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+    
+    .peak-log-table tr:hover {
+      background-color: #f0f7ff;
+    }
+    
+    .camera-container {
+      position: relative;
+      margin-bottom: 2rem;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    }
+    
+    .camera-feed {
+      width: 100%;
+      height: 450px;
+      object-fit: cover;
+      display: block;
+    }
+    
+    .gps-overlay {
+      position: absolute;
+      bottom: 1rem;
+      left: 1rem;
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      font-size: 0.9rem;
+    }
+    
+    .map-container {
+      background: white;
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+      height: 400px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #666;
+      font-size: 1.1rem;
+      margin-bottom: 2rem;
+    }
+    
+    /* Log Files Section */
+    .log-files-section {
+      background: white;
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    }
+    
+    .log-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    
+    .log-table th {
+      background-color: #3282b8;
+      color: white;
+      text-align: left;
+      padding: 0.8rem 1rem;
+      font-weight: 500;
+      position: sticky;
+      top: 0;
+    }
+    
+    .log-table td {
+      padding: 0.8rem 1rem;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .log-table tr:nth-child(even) {
+      background-color: #f5f9ff;
+    }
+    
+    .log-table tr:hover {
+      background-color: #e1f0ff;
+    }
+    
+    .log-table-container {
+      max-height: 500px;
+      overflow-y: auto;
+      border-radius: 8px;
+      border: 1px solid #e0e0e0;
+    }
+    
+    .log-controls {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    
+    .search-box {
+      display: flex;
+      gap: 0.5rem;
+    }
+    
+    .search-box input {
+      padding: 0.7rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      width: 250px;
+      font-size: 0.9rem;
+    }
+    
+    .date-filter {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    
+    .date-filter input {
+      padding: 0.7rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 0.9rem;
+    }
+    
+    .download-btn {
+      background: #0f4c75;
+      color: white;
+      border: none;
+      padding: 0.7rem 1.2rem;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+      transition: background 0.3s;
+    }
+    
+    .download-btn:hover {
+      background: #1b5a8a;
+    }
+    
+    /* Responsive design */
+    @media (max-width: 768px) {
+      .sensor-cards {
+        grid-template-columns: 1fr;
+      }
+      
+      .nav-menu {
+        flex-direction: column;
+        align-items: center;
+      }
+      
+      .nav-btn {
+        width: 100%;
+        max-width: 300px;
+        justify-content: center;
+      }
+      
+      .log-controls {
+        flex-direction: column;
+      }
+      
+      .search-box, .date-filter {
+        width: 100%;
+      }
+      
+      .search-box input {
+        width: 100%;
+      }
+    }
+  </style>
 </head>
 <body>
-    <div class="header">
-        <h1 class="app-title">Drone Water Analysis Dashboard</h1>
-        <nav class="nav-menu">
-            <button class="nav-btn active" data-view="graphs">
-                <span>📈</span> Sensor Analytics
-            </button>
-            <button class="nav-btn" data-view="camera">
-                <span>🎥</span> Live Camera Feed
-            </button>
-        </nav>
+  <div class="header">
+    <h1 class="app-title">Drone Water Analysis Dashboard</h1>
+    <nav class="nav-menu">
+      <button class="nav-btn active" data-view="graphs"><span>📈</span> Sensor Analytics</button>
+      <button class="nav-btn" data-view="camera"><span>🎥</span> Live Camera Feed</button>
+      <button class="nav-btn" data-view="log"><span>📋</span> Log Files</button>
+    </nav>
+  </div>
+
+  <div class="main-content">
+    <!-- Sensor Cards -->
+    <h2 class="section-title">Real-Time Sensor Values <span class="status-indicator"></span></h2>
+    <div class="sensor-cards">
+      <div class="card"><h3><span>🌡</span> Temperature</h3><p class="value" id="tempValue">-- °C</p><p class="sub-value">Optimal: 26-29°C</p></div>
+      <div class="card turbidity-card">
+        <h3><span>🌊</span> Turbidity <span id="turbidityStatus" class="status-indicator"></span></h3>
+        <p class="value" id="turbidityValue">-- NTU</p>
+        <p class="sub-value">Optimal: &lt; 0-5 NTU</p>
+        <div class="connection-status" id="arduinoStatus">
+          <span class="status-dot disconnected"></span><span>Arduino: Disconnected</span>
+        </div>
+      </div>
+      <div class="card conductivity-card">
+        <h3><span>⚡</span> Conductivity</h3>
+        <p class="value" id="conductivityValue">-- mS/cm</p>
+        <p class="sub-value">(Salinity: <span id="salinityValue">-- PSU</span>)</p>
+      </div>
+      <div class="card">
+        <h3><span>📍</span> GPS Position</h3>
+        <p class="value" id="gpsValue">--, --</p>
+        <p class="sub-value">Altitude: <span id="altitudeValue">-- m</span></p>
+      </div>
     </div>
 
-    <div class="main-content">
-        <h2 class="section-title">Real-Time Sensor Values <span class="status-indicator"></span></h2>
-        <div class="sensor-cards">
-            <div class="card">
-                <h3><span>🌡</span> Temperature</h3>
-                <p class="value" id="tempValue">-- °C</p>
-                <p class="sub-value">Optimal: 26-29°C</p>
-            </div>
-            <div class="card turbidity-card">
-                <h3><span>🌊</span> Turbidity <span id="turbidityStatus" class="status-indicator"></span></h3>
-                <p class="value" id="turbidityValue">-- NTU</p>
-                <p class="sub-value">Optimal: &lt; 0-5 NTU</p>
-                <div class="connection-status" id="arduinoStatus">
-                    <span class="status-dot disconnected"></span>
-                    <span>Arduino: Disconnected</span>
-                </div>
-            </div>
-            <div class="card conductivity-card">
-                <h3><span>⚡</span> Conductivity</h3>
-                <p class="value" id="conductivityValue">-- mS/cm</p>
-                <p class="sub-value">(Salinity: <span id="salinityValue">-- PSU</span>)</p>
-            </div>
-            <div class="card">
-                <h3><span>📍</span> GPS Position</h3>
-                <p class="value" id="gpsValue">--, --</p>
-                <p class="sub-value">Altitude: <span id="altitudeValue">-- m</span></p>
-            </div>
-        </div>
+    <!-- Graphs + Peak Log Section -->
+    <div id="graphsView" class="content-section active">
+      <h2 class="section-title">Sensor Data Trends</h2>
+      <div class="update-info">Last updated: <span id="lastUpdate">--:--:--</span></div>
+      <div id="sensorGraphs" class="graph-container"></div>
 
-        <div id="graphsView" class="content-section active">
-            <h2 class="section-title">Sensor Data Trends</h2>
-            <div class="update-info">Last updated: <span id="lastUpdate">--:--:--</span></div>
-            <div id="sensorGraphs" class="graph-container"></div>
-        </div>
-
-        <div id="cameraView" class="content-section">
-            <h2 class="section-title">Live Camera Feed</h2>
-            <div class="camera-container">
-                <img src="https://images.unsplash.com/photo-1566228015668-4c45dbc4e2f5?q=80&w=1887&auto=format&fit=crop" class="camera-feed" alt="Drone camera feed">
-                <div class="gps-overlay" id="liveGps">
-                    🛰 GPS: --, --
-                </div>
-            </div>
-            
-            <h2 class="section-title" style="margin-top: 30px;">Survey Area Map</h2>
-            <div class="map-container">
-                <div id="map" class="map-placeholder">
-                    Interactive map would display here
-                </div>
-            </div>
-        </div>
+      <div class="peak-log-section">
+        <h2 class="section-title">Peak Log</h2>
+        <table class="peak-log-table" id="peakLogTable">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Peak Temperature (°C)</th>
+              <th>Conductivity (mS/cm)</th>
+              <th>Turbidity (NTU)</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
 
-    <script>
-        // Navigation
-        document.querySelectorAll('.nav-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.nav-btn, .content-section').forEach(el => {
-                    el.classList.remove('active');
-                });
-                btn.classList.add('active');
-                document.getElementById(btn.dataset.view + 'View').classList.add('active');
-            });
+    <!-- Camera Section -->
+    <div id="cameraView" class="content-section">
+      <h2 class="section-title">Live Camera Feed</h2>
+      <div class="camera-container">
+        <img src="https://images.unsplash.com/photo-1566228015668-4c45dbc4e2f5?q=80&w=1887&auto=format&fit=crop" class="camera-feed" alt="Drone camera feed"/>
+        <div class="gps-overlay" id="liveGps">🛰 GPS: --, --</div>
+      </div>
+      <h2 class="section-title" style="margin-top: 30px;">Survey Area Map</h2>
+      <div class="map-container"><div id="map" class="map-placeholder">Interactive map would display here</div></div>
+    </div>
+    
+    <!-- Log Files Section -->
+    <div id="logView" class="content-section">
+      <h2 class="section-title">Water Analysis Log Files</h2>
+      <div class="log-files-section">
+        <div class="log-controls">
+          <div class="search-box">
+            <input type="text" id="logSearch" placeholder="Search logs...">
+            <button class="download-btn" onclick="searchLogs()">🔍 Search</button>
+          </div>
+          <div class="date-filter">
+            <label>From:</label>
+            <input type="date" id="startDate">
+            <label>To:</label>
+            <input type="date" id="endDate">
+            <button class="download-btn" onclick="filterByDate()">Filter</button>
+          </div>
+          <button class="download-btn" onclick="downloadLogs()">📥 Download CSV</button>
+        </div>
+        
+        <div class="log-table-container">
+          <table class="log-table" id="logTable">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Temperature (°C)</th>
+                <th>Turbidity (NTU)</th>
+                <th>EC (mS/cm)</th>
+                <th>GPS Coordinates</th>
+              </tr>
+            </thead>
+            <tbody id="logTableBody">
+              <!-- Log entries will be populated here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.nav-btn, .content-section').forEach(el => el.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.view + 'View').classList.add('active');
+        
+        // When log tab is clicked, fetch and display logs
+        if (btn.dataset.view === 'log') {
+          fetchAndPopulateLogs();
+        }
+      });
+    });
+
+    let peakTemperature = -Infinity;
+    let lastLoggedTime = 0;
+
+    // Fetch and populate log table with peak logs
+    function fetchAndPopulateLogs() {
+      fetch('/api/peak-logs')
+        .then(response => response.json())
+        .then(data => {
+          const tableBody = document.getElementById('logTableBody');
+          tableBody.innerHTML = '';
+          
+          data.forEach(log => {
+            const row = document.createElement('tr');
+            const date = new Date(log.time);
+            row.innerHTML = `
+              <td>${date.toLocaleString()}</td>
+              <td>${log.temperature}</td>
+              <td>${log.turbidity}</td>
+              <td>${log.ec}</td>
+              <td>${log.latitude}, ${log.longitude}</td>
+            `;
+            tableBody.appendChild(row);
+          });
+        })
+        .catch(error => {
+          console.error('Error fetching log data:', error);
         });
+    }
 
-        // Function to update real-time data
-        function updateRealTimeData() {
-            fetch('/api/real-time-data')
-                .then(response => response.json())
-                .then(data => {
-                    const turbidity = data.turbidity;
-                    const temperature = data.temperature;
-                    const conductivity = data.conductivity;
-                    const timestamp = new Date(data.timestamp);
-                    const isConnected = data.connected;
-                    
-                    // Update turbidity value
-                    document.getElementById('turbidityValue').textContent = 
-                        `${turbidity.toFixed(2)} NTU`;
-                    document.getElementById('tempValue').textContent = `${temperature.toFixed(2)} °C`;
-                    document.getElementById('conductivityValue').textContent = `${conductivity.toFixed(2)} mS/cm`;
-                    document.getElementById('salinityValue').textContent = `${(conductivity * 0.64).toFixed(2)} PSU`;                    
-                    // Update connection status
-                    const statusDot = document.querySelector('#arduinoStatus .status-dot');
-                    const statusText = document.querySelector('#arduinoStatus span:last-child');
-                    if (isConnected) {
-                        statusDot.className = 'status-dot connected';
-                        statusText.textContent = 'Arduino: Connected';
-                        document.getElementById('turbidityStatus').style.display = 'inline-block';
-                    } else {
-                        statusDot.className = 'status-dot disconnected';
-                        statusText.textContent = 'Arduino: Disconnected';
-                        document.getElementById('turbidityStatus').style.display = 'none';
-                    }
-                    
-                    // Update last update time
-                    document.getElementById('lastUpdate').textContent = 
-                        timestamp.toLocaleTimeString();
-                })
-                .catch(error => {
-                    console.error('Error fetching real-time data:', error);
-                    const statusDot = document.querySelector('#arduinoStatus .status-dot');
-                    const statusText = document.querySelector('#arduinoStatus span:last-child');
-                    statusDot.className = 'status-dot disconnected';
-                    statusText.textContent = 'Arduino: Connection Error';
-                    document.getElementById('turbidityStatus').style.display = 'none';
-                });
-        }
+    // Search logs (client-side)
+    function searchLogs() {
+      const searchTerm = document.getElementById('logSearch').value.toLowerCase();
+      const rows = document.querySelectorAll('#logTableBody tr');
+      
+      rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(searchTerm) ? '' : 'none';
+      });
+    }
 
-        // Function to update simulated data and graphs
-        function updateDashboard() {
-            // Generate simulated values for other parameters
-            const simulatedLat = 40.7128 + (Math.random() - 0.5) * 0.01;
-            const simulatedLon = -74.0060 + (Math.random() - 0.5) * 0.01;
-            const simulatedAltitude = (Math.random() * 50 + 30).toFixed(0);
-            
-            // Update other value
-            document.getElementById('gpsValue').textContent = 
-                `${simulatedLat.toFixed(4)}, ${simulatedLon.toFixed(4)}`;
-            document.getElementById('altitudeValue').textContent = 
-                `${simulatedAltitude} m`;
-            document.getElementById('liveGps').textContent = 
-                `🛰 GPS: ${simulatedLat.toFixed(4)}, ${simulatedLon.toFixed(4)}`;
-            
-            // Update graphs with historical data
-            fetch('/api/historical-data')
-                .then(response => response.json())
-                .then(historicalData => {
-                    // For simplicity, we'll use the last 20 points
-                    const dataPoints = historicalData.slice(-20);
-                    const times = dataPoints.map(d => new Date(d.time).toLocaleTimeString());
-                    
-                    Plotly.newPlot('sensorGraphs', [{
-                        x: times,
-                        y: dataPoints.map(d => d.turbidity),
-                        name: 'Turbidity',
-                        line: { color: '#2196F3', width: 3 },
-                        mode: 'lines+markers',
-                        marker: { size: 6 }
-                    }, {
-                        x: times,
-                        y: dataPoints.map(d => d.temperature),
-                        name: 'Temperature',
-                        line: { color: '#FF5252', width: 3 },
-                        mode: 'lines+markers',
-                        marker: { size: 6 }
-                    }, {
-                        x: times,
-                        y: dataPoints.map(d => d.conductivity),
-                        name: 'Conductivity',
-                        line: { color: '#4CAF50', width: 3 },
-                        mode: 'lines+markers',
-                        marker: { size: 6 }
-                    }], {
-                        title: 'Sensor Trends Over Time',
-                        paper_bgcolor: 'rgba(0,0,0,0)',
-                        plot_bgcolor: 'rgba(0,0,0,0.02)',
-                        xaxis: { title: 'Time' },
-                        yaxis: { 
-                            title: 'Sensor Values',
-                            range: [0, 80],
-                            autorange: false
-                         },
-                        margin: { t: 40, l: 60, r: 30, b: 60 },
-                        hovermode: 'closest',
-                        legend: { orientation: 'h', y: -0.2 }
-                    });
-                });
-        }
-
-        // Initial update
-        updateRealTimeData();
-        updateDashboard();
+    // Filter by date (client-side)
+    function filterByDate() {
+      const startDate = new Date(document.getElementById('startDate').value);
+      const endDate = new Date(document.getElementById('endDate').value);
+      const rows = document.querySelectorAll('#logTableBody tr');
+      
+      // If no date selected, show all
+      if (!startDate || !endDate) {
+        rows.forEach(row => row.style.display = '');
+        return;
+      }
+      
+      // Adjust endDate to include the entire day
+      const adjustedEndDate = new Date(endDate);
+      adjustedEndDate.setDate(adjustedEndDate.getDate() + 1);
+      
+      rows.forEach(row => {
+        const dateStr = row.cells[0].textContent;
+        const rowDate = new Date(dateStr);
         
-        // Update real-time data every second
-        setInterval(updateRealTimeData, 1000);
-        
-        // Update dashboard every 5 seconds
-        setInterval(updateDashboard, 5000);
-    </script>
+        if (rowDate >= startDate && rowDate < adjustedEndDate) {
+          row.style.display = '';
+        } else {
+          row.style.display = 'none';
+        }
+      });
+    }
+
+    // Download logs as CSV
+    function downloadLogs() {
+      fetch('/api/peak-logs')
+        .then(response => response.json())
+        .then(data => {
+          let csvContent = "Time,Temperature (°C),Turbidity (NTU),EC (mS/cm),Latitude,Longitude\n";
+          
+          data.forEach(log => {
+            const date = new Date(log.time);
+            csvContent += `"${date.toLocaleString()}","${log.temperature}","${log.turbidity}","${log.ec}","${log.latitude}","${log.longitude}"\n`;
+          });
+          
+          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.setAttribute("href", url);
+          link.setAttribute("download", "water_analysis_logs.csv");
+          link.style.visibility = 'hidden';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        });
+    }
+
+    function updateRealTimeData() {
+      fetch('/api/real-time-data')
+        .then(response => response.json())
+        .then(data => {
+          const { turbidity, temperature, conductivity, timestamp, connected } = data;
+          const now = Date.now();
+
+          document.getElementById('turbidityValue').textContent = `${parseFloat(turbidity).toFixed(2)} NTU`;
+          document.getElementById('tempValue').textContent = `${parseFloat(temperature).toFixed(2)} °C`;
+          document.getElementById('conductivityValue').textContent = `${parseFloat(conductivity).toFixed(2)} mS/cm`;
+          document.getElementById('salinityValue').textContent = `${(parseFloat(conductivity) * 0.64).toFixed(2)} PSU`;
+
+          const statusDot = document.querySelector('#arduinoStatus .status-dot');
+          const statusText = document.querySelector('#arduinoStatus span:last-child');
+
+          if (connected) {
+            statusDot.className = 'status-dot connected';
+            statusText.textContent = 'Arduino: Connected';
+            document.getElementById('turbidityStatus').style.display = 'inline-block';
+          } else {
+            statusDot.className = 'status-dot disconnected';
+            statusText.textContent = 'Arduino: Disconnected';
+            document.getElementById('turbidityStatus').style.display = 'none';
+          }
+
+          if (timestamp) {
+            const date = new Date(timestamp);
+            document.getElementById('lastUpdate').textContent = `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+          }
+
+          // Peak log every 5 minutes
+          if (parseFloat(temperature) > peakTemperature) {
+            peakTemperature = parseFloat(temperature);
+          }
+
+          if (now - lastLoggedTime >= 5 * 60 * 1000) {
+            const table = document.getElementById('peakLogTable').querySelector('tbody');
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td>${new Date().toLocaleTimeString()}</td>
+              <td>${peakTemperature.toFixed(2)}</td>
+              <td>${parseFloat(conductivity).toFixed(2)}</td>
+              <td>${parseFloat(turbidity).toFixed(2)}</td>
+            `;
+            table.appendChild(row);
+            lastLoggedTime = now;
+            peakTemperature = -Infinity;
+          }
+        })
+        .catch(error => {
+          console.error('Error fetching real-time data:', error);
+          const statusDot = document.querySelector('#arduinoStatus .status-dot');
+          const statusText = document.querySelector('#arduinoStatus span:last-child');
+          statusDot.className = 'status-dot disconnected';
+          statusText.textContent = 'Arduino: Connection Error';
+          document.getElementById('turbidityStatus').style.display = 'none';
+        });
+    }
+
+    function updateDashboard() {
+      const lat = 40.7128 + (Math.random() - 0.5) * 0.01;
+      const lon = -74.0060 + (Math.random() - 0.5) * 0.01;
+      const altitude = (Math.random() * 50 + 30).toFixed(0);
+
+      document.getElementById('gpsValue').textContent = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+      document.getElementById('altitudeValue').textContent = `${altitude} m`;
+      document.getElementById('liveGps').textContent = `🛰 GPS: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+
+      fetch('/api/historical-data')
+        .then(res => res.json())
+        .then(data => {
+          const points = data.slice(-20);
+          const times = points.map(p => new Date(p.time).toLocaleTimeString());
+          Plotly.newPlot('sensorGraphs', [
+            { x: times, y: points.map(p => p.turbidity), name: 'Turbidity', line: { color: '#2196F3' }, mode: 'lines+markers' },
+            { x: times, y: points.map(p => p.temperature), name: 'Temperature', line: { color: '#FF5252' }, mode: 'lines+markers' },
+            { x: times, y: points.map(p => p.conductivity), name: 'Conductivity', line: { color: '#4CAF50' }, mode: 'lines+markers' }
+          ], {
+            title: 'Sensor Trends Over Time',
+            xaxis: { title: 'Time' },
+            yaxis: { title: 'Sensor Values', range: [0, Math.max(30, ...points.map(p=>p.turbidity), ...points.map(p=>p.temperature), ...points.map(p=>p.conductivity))], autorange: false },
+            paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0.02)', margin: { t: 40, l: 60, r: 30, b: 60 },
+            legend: { orientation: 'h', y: -0.2 }
+          });
+        });
+    }
+
+    // Set default dates for log filters
+    const today = new Date();
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    
+    document.getElementById('startDate').valueAsDate = oneWeekAgo;
+    document.getElementById('endDate').valueAsDate = today;
+
+    // Initialize
+    updateRealTimeData();
+    updateDashboard();
+    setInterval(updateRealTimeData, 2000);
+    setInterval(updateDashboard, 10000);
+  </script>
 </body>
 </html>

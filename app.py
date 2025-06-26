@@ -1,6 +1,6 @@
 from flask import Flask, render_template, Response, jsonify
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, timedelta
 import random
 import time
 import serial
@@ -35,13 +35,29 @@ last_update = None
 first_connection_time = None
 data_lock = threading.Lock()
 
-# Database model
+# Peak tracking variables
+current_peak_temp = -float('inf')
+current_peak_turbidity = -float('inf')
+current_peak_ec = -float('inf')
+last_peak_log_time = datetime.now()
+
+# Database model for raw sensor data
 class SensorData(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     turbidity = db.Column(db.Float)
     temperature = db.Column(db.Float)
     conductivity = db.Column(db.Float)
+    latitude = db.Column(db.Float)
+    longitude = db.Column(db.Float)
+
+# Database model for peak values
+class PeakLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    peak_temperature = db.Column(db.Float)
+    peak_turbidity = db.Column(db.Float)
+    peak_ec = db.Column(db.Float)
     latitude = db.Column(db.Float)
     longitude = db.Column(db.Float)
 
@@ -79,7 +95,6 @@ def serial_reader():
                 logger.error(f"Serial read error: {str(e)}")
         time.sleep(1)
 
-
 # Generate data for logging (real + GPS)
 def generate_sensor_data():
     with data_lock:
@@ -94,8 +109,20 @@ def generate_sensor_data():
         'longitude': round(6.4375 + random.uniform(-0.01, 0.01), 6)
     }
 
+# Generate peak log data
+def generate_peak_log():
+    with data_lock:
+        return {
+            'peak_temperature': round(current_peak_temp, 2),
+            'peak_turbidity': round(current_peak_turbidity, 2),
+            'peak_ec': round(current_peak_ec, 2),
+            'latitude': round(4.2105 + random.uniform(-0.01, 0.01), 6),
+            'longitude': round(6.4375 + random.uniform(-0.01, 0.01), 6)
+        }
+
 # Logger every 3 seconds
 def sensor_logger():
+    global current_peak_temp, current_peak_turbidity, current_peak_ec, last_peak_log_time
     while True:
         time.sleep(3)
         with app.app_context():
@@ -110,8 +137,34 @@ def sensor_logger():
                     timestamp=datetime.now()
                 )
                 db.session.add(new_entry)
+                
+                # Update peak values
+                current_peak_temp = max(current_peak_temp, data['temperature'])
+                current_peak_turbidity = max(current_peak_turbidity, data['turbidity'])
+                current_peak_ec = max(current_peak_ec, data['conductivity'])
+                
+                # Log peak values every 5 minutes
+                now = datetime.now()
+                if (now - last_peak_log_time).total_seconds() >= 300:  # 5 minutes
+                    peak_data = generate_peak_log()
+                    new_peak_entry = PeakLog(
+                        peak_temperature=peak_data['peak_temperature'],
+                        peak_turbidity=peak_data['peak_turbidity'],
+                        peak_ec=peak_data['peak_ec'],
+                        latitude=peak_data['latitude'],
+                        longitude=peak_data['longitude'],
+                        timestamp=now
+                    )
+                    db.session.add(new_peak_entry)
+                    logger.info(f"Logged peak values: Temp={peak_data['peak_temperature']}, Turbidity={peak_data['peak_turbidity']}, EC={peak_data['peak_ec']}")
+                    
+                    # Reset peak values
+                    current_peak_temp = -float('inf')
+                    current_peak_turbidity = -float('inf')
+                    current_peak_ec = -float('inf')
+                    last_peak_log_time = now
+                
                 db.session.commit()
-                logger.info(f"Logged: {data}")
 
 # Routes
 @app.route('/')
@@ -146,6 +199,24 @@ def get_historical_data():
         'lon': entry.longitude
     } for entry in entries]
 
+    return jsonify(data)
+
+# API endpoint for peak logs
+@app.route('/api/peak-logs')
+def get_peak_logs():
+    # Get logs from the past 2 days
+    two_days_ago = datetime.utcnow() - timedelta(days=2)
+    logs = PeakLog.query.filter(PeakLog.timestamp >= two_days_ago).order_by(PeakLog.timestamp.desc()).all()
+    
+    data = [{
+        'time': log.timestamp.isoformat(),
+        'temperature': log.peak_temperature,
+        'turbidity': log.peak_turbidity,
+        'ec': log.peak_ec,
+        'latitude': log.latitude,
+        'longitude': log.longitude
+    } for log in logs]
+    
     return jsonify(data)
 
 @app.route('/video_feed')
