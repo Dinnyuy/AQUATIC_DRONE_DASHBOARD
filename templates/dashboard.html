@@ -1,729 +1,1638 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Drone Water Analysis Dashboard</title>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet"/>
-  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      font-family: 'Roboto', sans-serif;
-    }
-    
-    body {
-      background-color: #f0f4f8;
-      color: #333;
-      line-height: 1.6;
-    }
-    
-    .header {
-      background: linear-gradient(135deg, #0f4c75, #3282b8);
-      color: white;
-      padding: 1.5rem 2rem;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
-    
-    .app-title {
-      font-weight: 500;
-      font-size: 1.8rem;
-      margin-bottom: 1.2rem;
-      text-align: center;
-    }
-    
-    .nav-menu {
-      display: flex;
-      justify-content: center;
-      gap: 1.5rem;
-      flex-wrap: wrap;
-    }
-    
-    .nav-btn {
-      background: rgba(255, 255, 255, 0.15);
-      border: none;
-      color: white;
-      padding: 0.8rem 1.5rem;
-      border-radius: 30px;
-      font-size: 1rem;
-      font-weight: 500;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      transition: all 0.3s ease;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    }
-    
-    .nav-btn:hover {
-      background: rgba(255, 255, 255, 0.25);
-      transform: translateY(-2px);
-    }
-    
-    .nav-btn.active {
-      background: white;
-      color: #0f4c75;
-      font-weight: 500;
-    }
-    
-    .main-content {
-      max-width: 1400px;
-      margin: 2rem auto;
-      padding: 0 2rem;
-    }
-    
-    .section-title {
-      font-size: 1.5rem;
-      color: #0f4c75;
-      margin-bottom: 1.5rem;
-      padding-bottom: 0.5rem;
-      border-bottom: 2px solid #bbe1fa;
-      display: flex;
-      align-items: center;
-      gap: 0.8rem;
-    }
-    
-    .status-indicator {
-      display: inline-block;
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      background: #4CAF50;
-      margin-left: 0.5rem;
-      animation: pulse 2s infinite;
-    }
-    
-    @keyframes pulse {
-      0% { opacity: 0.7; }
-      50% { opacity: 1; }
-      100% { opacity: 0.7; }
-    }
-    
-    .sensor-cards {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 1.5rem;
-      margin-bottom: 2.5rem;
-    }
-    
-    .card {
-      background: white;
-      border-radius: 12px;
-      padding: 1.5rem;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-      transition: transform 0.3s ease;
-    }
-    
-    .card:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
-    }
-    
-    .turbidity-card {
-      position: relative;
-    }
-    
-    .conductivity-card {
-      position: relative;
-    }
-    
-    .card h3 {
-      font-size: 1.2rem;
-      margin-bottom: 1rem;
-      color: #1b262c;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-    
-    .card .value {
-      font-size: 1.8rem;
-      font-weight: 500;
-      margin-bottom: 0.5rem;
-    }
-    
-    .card .sub-value {
-      color: #666;
-      font-size: 0.95rem;
-    }
-    
-    .connection-status {
-      position: absolute;
-      bottom: 1rem;
-      right: 1rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-size: 0.85rem;
-      color: #666;
-    }
-    
-    .status-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      display: inline-block;
-    }
-    
-    .status-dot.connected {
-      background: #4CAF50;
-      animation: pulse 2s infinite;
-    }
-    
-    .status-dot.disconnected {
-      background: #f44336;
-    }
-    
-    .content-section {
-      display: none;
-    }
-    
-    .content-section.active {
-      display: block;
-      animation: fadeIn 0.5s ease;
-    }
-    
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    
-    .update-info {
-      text-align: right;
-      color: #666;
-      font-size: 0.9rem;
-      margin-bottom: 1rem;
-    }
-    
-    .graph-container {
-      background: white;
-      border-radius: 12px;
-      padding: 1.5rem;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-      margin-bottom: 2rem;
-      height: 400px;
-    }
-    
-    .peak-log-section {
-      background: white;
-      border-radius: 12px;
-      padding: 1.5rem;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-      margin-bottom: 2rem;
-    }
-    
-    .peak-log-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 1rem;
-    }
-    
-    .peak-log-table th {
-      background-color: #0f4c75;
-      color: white;
-      text-align: left;
-      padding: 0.8rem 1rem;
-      font-weight: 500;
-    }
-    
-    .peak-log-table td {
-      padding: 0.8rem 1rem;
-      border-bottom: 1px solid #eee;
-    }
-    
-    .peak-log-table tr:nth-child(even) {
-      background-color: #f9f9f9;
-    }
-    
-    .peak-log-table tr:hover {
-      background-color: #f0f7ff;
-    }
-    
-    .camera-container {
-      position: relative;
-      margin-bottom: 2rem;
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-    }
-    
-    .camera-feed {
-      width: 100%;
-      height: 450px;
-      object-fit: cover;
-      display: block;
-    }
-    
-    .gps-overlay {
-      position: absolute;
-      bottom: 1rem;
-      left: 1rem;
-      background: rgba(0, 0, 0, 0.7);
-      color: white;
-      padding: 0.5rem 1rem;
-      border-radius: 4px;
-      font-size: 0.9rem;
-    }
-    
-    .map-container {
-      background: white;
-      border-radius: 12px;
-      padding: 1.5rem;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-      height: 400px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #666;
-      font-size: 1.1rem;
-      margin-bottom: 2rem;
-    }
-    
-    /* Log Files Section */
-    .log-files-section {
-      background: white;
-      border-radius: 12px;
-      padding: 1.5rem;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-    }
-    
-    .log-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 1rem;
-    }
-    
-    .log-table th {
-      background-color: #3282b8;
-      color: white;
-      text-align: left;
-      padding: 0.8rem 1rem;
-      font-weight: 500;
-      position: sticky;
-      top: 0;
-    }
-    
-    .log-table td {
-      padding: 0.8rem 1rem;
-      border-bottom: 1px solid #eee;
-    }
-    
-    .log-table tr:nth-child(even) {
-      background-color: #f5f9ff;
-    }
-    
-    .log-table tr:hover {
-      background-color: #e1f0ff;
-    }
-    
-    .log-table-container {
-      max-height: 500px;
-      overflow-y: auto;
-      border-radius: 8px;
-      border: 1px solid #e0e0e0;
-    }
-    
-    .log-controls {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 1rem;
-      flex-wrap: wrap;
-      gap: 1rem;
-    }
-    
-    .search-box {
-      display: flex;
-      gap: 0.5rem;
-    }
-    
-    .search-box input {
-      padding: 0.7rem;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      width: 250px;
-      font-size: 0.9rem;
-    }
-    
-    .date-filter {
-      display: flex;
-      gap: 0.5rem;
-      align-items: center;
-    }
-    
-    .date-filter input {
-      padding: 0.7rem;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      font-size: 0.9rem;
-    }
-    
-    .download-btn {
-      background: #0f4c75;
-      color: white;
-      border: none;
-      padding: 0.7rem 1.2rem;
-      border-radius: 4px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-size: 0.9rem;
-      transition: background 0.3s;
-    }
-    
-    .download-btn:hover {
-      background: #1b5a8a;
-    }
-    
-    /* Responsive design */
-    @media (max-width: 768px) {
-      .sensor-cards {
-        grid-template-columns: 1fr;
-      }
-      
-      .nav-menu {
-        flex-direction: column;
-        align-items: center;
-      }
-      
-      .nav-btn {
-        width: 100%;
-        max-width: 300px;
-        justify-content: center;
-      }
-      
-      .log-controls {
-        flex-direction: column;
-      }
-      
-      .search-box, .date-filter {
-        width: 100%;
-      }
-      
-      .search-box input {
-        width: 100%;
-      }
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drone Water Analysis Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        :root {
+            --primary: #0f4c75;
+            --secondary: #3282b8;
+            --accent: #4CAF50;
+            --warning: #FF9800;
+            --danger: #f44336;
+            --light: #f0f4f8;
+            --dark: #1b262c;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #e0f7fa 0%, #bbdefb 100%);
+            color: #333;
+            line-height: 1.6;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            padding: 1.2rem 2rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .app-title {
+            font-weight: 500;
+            font-size: 1.8rem;
+            margin-bottom: 1rem;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.8rem;
+        }
+        
+        .nav-menu {
+            display: flex;
+            justify-content: center;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            margin-top: 0.5rem;
+        }
+        
+        .nav-btn {
+            background: rgba(255, 255, 255, 0.15);
+            border: none;
+            color: white;
+            padding: 0.7rem 1.3rem;
+            border-radius: 30px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .nav-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-2px);
+        }
+        
+        .nav-btn.active {
+            background: white;
+            color: var(--primary);
+            font-weight: 500;
+        }
+        
+        .main-content {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 1.5rem;
+        }
+        
+        .section-title {
+            font-size: 1.5rem;
+            color: var(--primary);
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #bbe1fa;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--accent);
+            margin-left: 0.5rem;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 0.7; }
+            50% { opacity: 1; }
+            100% { opacity: 0.7; }
+        }
+        
+        .sensor-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2.5rem;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+        }
+        
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+        }
+        
+        .card:nth-child(1)::before { background: linear-gradient(90deg, #FF5252, #FF9E80); }
+        .card:nth-child(2)::before { background: linear-gradient(90deg, #2196F3, #81D4FA); }
+        .card:nth-child(3)::before { background: linear-gradient(90deg, #4CAF50, #81C784); }
+        .card:nth-child(4)::before { background: linear-gradient(90deg, #FF9800, #FFCC80); }
+        
+        .turbidity-card {
+            position: relative;
+        }
+        
+        .conductivity-card {
+            position: relative;
+        }
+        
+        .card h3 {
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            color: var(--dark);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .card .value {
+            font-size: 1.8rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+        
+        .card .sub-value {
+            color: #666;
+            font-size: 0.95rem;
+        }
+        
+        .connection-status {
+            position: absolute;
+            bottom: 1rem;
+            right: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            color: #666;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        
+        .status-dot.connected {
+            background: var(--accent);
+            animation: pulse 2s infinite;
+        }
+        
+        .status-dot.disconnected {
+            background: var(--danger);
+        }
+        
+        .status-dot.error {
+            background: var(--warning);
+        }
+        
+        .content-section {
+            display: none;
+        }
+        
+        .content-section.active {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .update-info {
+            text-align: right;
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem;
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 8px;
+        }
+        
+        .update-info.disconnected {
+            color: var(--danger);
+            font-weight: 500;
+        }
+        
+        .graph-container {
+            background: white;
+            border-radius: 13px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            margin-bottom: 3rem;
+            height: 500px;
+        }
+        
+        .peak-log-section {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            margin-bottom: 2rem;
+        }
+        
+        .peak-log-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        
+        .peak-log-table th {
+            background-color: var(--primary);
+            color: white;
+            text-align: left;
+            padding: 0.8rem 1rem;
+            font-weight: 500;
+        }
+        
+        .peak-log-table td {
+            padding: 0.8rem 1rem;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .peak-log-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        .peak-log-table tr:hover {
+            background-color: #f0f7ff;
+        }
+        
+        .camera-container {
+            position: relative;
+            margin-bottom: 2rem;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            background: #000;
+            min-height: 450px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .camera-feed {
+            width: 100%;
+            height: 450px;
+            object-fit: contain;
+            display: block;
+        }
+        
+        .gps-overlay {
+            position: absolute;
+            bottom: 1rem;
+            left: 1rem;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .map-container {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+            background: linear-gradient(rgba(255,255,255,0.8), rgba(255,255,255,0.8)), 
+                        url('https://images.unsplash.com/photo-1587132137056-bfbf0166836e?q=80&w=2080&auto=format&fit=crop');
+            background-size: cover;
+            position: relative;
+        }
+        
+        .map-placeholder {
+            text-align: center;
+            z-index: 2;
+            max-width: 600px;
+            padding: 1rem;
+        }
+        
+        .map-placeholder h3 {
+            font-size: 1.5rem;
+            color: var(--primary);
+            margin-bottom: 1rem;
+        }
+        
+        .map-placeholder p {
+            line-height: 1.6;
+            margin-bottom: 1rem;
+        }
+        
+        /* Log Files Section */
+        .log-files-section {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        }
+        
+        .log-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        
+        .log-table th {
+            background-color: var(--secondary);
+            color: white;
+            text-align: left;
+            padding: 0.8rem 1rem;
+            font-weight: 500;
+            position: sticky;
+            top: 0;
+        }
+        
+        .log-table td {
+            padding: 0.8rem 1rem;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .log-table tr:nth-child(even) {
+            background-color: #f5f9ff;
+        }
+        
+        .log-table tr:hover {
+            background-color: #e1f0ff;
+        }
+        
+        .log-table-container {
+            max-height: 500px;
+            overflow-y: auto;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .log-controls {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        
+        .search-box {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        
+        .search-box input {
+            padding: 0.7rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 250px;
+            font-size: 0.9rem;
+        }
+        
+        .date-filter {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        
+        .date-filter input {
+            padding: 0.7rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+        
+        .download-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.7rem 1.2rem;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            transition: all 0.3s;
+        }
+        
+        .download-btn:hover {
+            background: var(--secondary);
+            transform: translateY(-2px);
+        }
+        
+        /* 3D Graph Styles */
+        .peak-3d-graph-container {
+            background: white;
+            border-radius: 13px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            margin-bottom: 3rem;
+            height: 600px;
+        }
+        
+        .dashboard-footer {
+            text-align: center;
+            padding: 1.5rem 0;
+            color: #666;
+            font-size: 0.9rem;
+            border-top: 1px solid #e0e0e0;
+            margin-top: 2rem;
+            background: rgba(255, 255, 255, 0.7);
+        }
+        
+        .drone-animation {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 2rem;
+            animation: fly 15s linear infinite;
+        }
+        
+        @keyframes fly {
+            0% { transform: translateX(100px) rotate(0deg); }
+            25% { transform: translateY(-40px) rotate(5deg); }
+            50% { transform: translateX(-100px) rotate(0deg); }
+            75% { transform: translateY(40px) rotate(-5deg); }
+            100% { transform: translateX(100px) rotate(0deg); }
+        }
+        
+        .connection-status-card {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .status-indicators {
+            display: flex;
+            gap: 1.5rem;
+        }
+        
+        .status-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .status-value {
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-top: 0.3rem;
+        }
+        
+        .serial-debug {
+            padding: 0.8rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+        }
+        
+        .reconnect-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.6rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .reconnect-btn:hover {
+            background: var(--secondary);
+        }
+        
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .sensor-cards {
+                grid-template-columns: 1fr;
+            }
+            
+            .nav-menu {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .nav-btn {
+                width: 100%;
+                max-width: 300px;
+                justify-content: center;
+            }
+            
+            .log-controls {
+                flex-direction: column;
+            }
+            
+            .search-box, .date-filter {
+                width: 100%;
+            }
+            
+            .search-box input {
+                width: 100%;
+            }
+            
+            .peak-3d-graph-container {
+                height: 450px;
+            }
+            
+            .connection-status-card {
+                flex-direction: column;
+                gap: 1rem;
+                align-items: flex-start;
+            }
+            
+            .status-indicators {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            /* Adjust alert position for mobile */
+            #alert-container {
+                top: 100px;
+                right: 10px;
+                left: 10px;
+                max-width: none;
+            }
+        }
+        
+        .gps-quality {
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-left: 0.5rem;
+        }
+        
+        .gps-quality.good {
+            background-color: #4CAF50;
+            color: white;
+        }
+        
+        .gps-quality.moderate {
+            background-color: #FFC107;
+            color: black;
+        }
+        
+        .gps-quality.poor {
+            background-color: #f44336;
+            color: white;
+        }
+        
+        .gps-status {
+            font-size: 0.9rem;
+            margin-top: 0.3rem;
+            font-weight: 500;
+        }
+        
+        .gps-status.simulated {
+            color: #FF9800;
+        }
+        
+        .gps-status.real {
+            color: #4CAF50;
+        }
+        
+        /* NEW: Threshold alert styles */
+        .threshold-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #f44336;
+            display: none;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(244, 67, 54, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0); }
+        }
+        
+        .alert-card {
+            border: 2px solid #f44336 !important;
+            animation: alert-pulse 1.5s infinite;
+        }
+        
+        @keyframes alert-pulse {
+            0% { box-shadow: 0 0 5px rgba(244, 67, 54, 0.5); }
+            50% { box-shadow: 0 0 20px rgba(244, 67, 54, 0.8); }
+            100% { box-shadow: 0 0 5px rgba(244, 67, 54, 0.5); }
+        }
+        
+        /* ALERT CONTAINER POSITION */
+        #alert-container {
+            position: fixed;
+            top: 120px; /* Below the header */
+            right: 20px; /* Position from right edge */
+            z-index: 1000;
+            max-width: 400px; /* Optimal width for graph area */
+            display: flex;
+            flex-direction: column;
+            gap: 10px; /* Space between alerts */
+        }
+        
+        .alert-notification {
+            background: linear-gradient(135deg, #f44336, #d32f2f);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: flex-start;
+            animation: slideInRight 0.5s ease;
+            position: relative;
+            max-width: 100%;
+        }
+        
+        @keyframes slideInRight {
+            from { 
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to { 
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        /* Close button for alerts */
+        .alert-close {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1rem;
+            cursor: pointer;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+        
+        .alert-close:hover {
+            opacity: 1;
+        }
+        
+        .alert-notification strong {
+            font-size: 1.1rem;
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .alert-notification .alert-sensors {
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+        
+        /* Combined alert styles */
+        .combined-alert {
+            background: linear-gradient(135deg, #d32f2f, #b71c1c);
+            padding: 15px 20px;
+            border-radius: 8px;
+            color: white;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+            animation: slideInRight 0.5s ease;
+            z-index: 2000;
+            position: relative;
+        }
+        
+        .combined-alert strong {
+            font-size: 1.2rem;
+            display: block;
+            margin-bottom: 8px;
+        }
+        
+        .combined-alert .alert-sensors {
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+    </style>
 </head>
 <body>
-  <div class="header">
-    <h1 class="app-title">Drone Water Analysis Dashboard</h1>
-    <nav class="nav-menu">
-      <button class="nav-btn active" data-view="graphs"><span>📈</span> Sensor Analytics</button>
-      <button class="nav-btn" data-view="camera"><span>🎥</span> Live Camera Feed</button>
-      <button class="nav-btn" data-view="log"><span>📋</span> Log Files</button>
-    </nav>
-  </div>
-
-  <div class="main-content">
-    <!-- Sensor Cards -->
-    <h2 class="section-title">Real-Time Sensor Values <span class="status-indicator"></span></h2>
-    <div class="sensor-cards">
-      <div class="card"><h3><span>🌡</span> Temperature</h3><p class="value" id="tempValue">-- °C</p><p class="sub-value">Optimal: 26-29°C</p></div>
-      <div class="card turbidity-card">
-        <h3><span>🌊</span> Turbidity <span id="turbidityStatus" class="status-indicator"></span></h3>
-        <p class="value" id="turbidityValue">-- NTU</p>
-        <p class="sub-value">Optimal: &lt; 0-5 NTU</p>
-        <div class="connection-status" id="arduinoStatus">
-          <span class="status-dot disconnected"></span><span>Arduino: Disconnected</span>
-        </div>
-      </div>
-      <div class="card conductivity-card">
-        <h3><span>⚡</span> Conductivity</h3>
-        <p class="value" id="conductivityValue">-- mS/cm</p>
-        <p class="sub-value">(Salinity: <span id="salinityValue">-- PSU</span>)</p>
-      </div>
-      <div class="card">
-        <h3><span>📍</span> GPS Position</h3>
-        <p class="value" id="gpsValue">--, --</p>
-        <p class="sub-value">Altitude: <span id="altitudeValue">-- m</span></p>
-      </div>
-    </div>
-
-    <!-- Graphs + Peak Log Section -->
-    <div id="graphsView" class="content-section active">
-      <h2 class="section-title">Sensor Data Trends</h2>
-      <div class="update-info">Last updated: <span id="lastUpdate">--:--:--</span></div>
-      <div id="sensorGraphs" class="graph-container"></div>
-
-      <div class="peak-log-section">
-        <h2 class="section-title">Peak Log</h2>
-        <table class="peak-log-table" id="peakLogTable">
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Peak Temperature (°C)</th>
-              <th>Conductivity (mS/cm)</th>
-              <th>Turbidity (NTU)</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Camera Section -->
-    <div id="cameraView" class="content-section">
-      <h2 class="section-title">Live Camera Feed</h2>
-      <div class="camera-container">
-        <img src="https://images.unsplash.com/photo-1566228015668-4c45dbc4e2f5?q=80&w=1887&auto=format&fit=crop" class="camera-feed" alt="Drone camera feed"/>
-        <div class="gps-overlay" id="liveGps">🛰 GPS: --, --</div>
-      </div>
-      <h2 class="section-title" style="margin-top: 30px;">Survey Area Map</h2>
-      <div class="map-container"><div id="map" class="map-placeholder">Interactive map would display here</div></div>
-    </div>
+    <!-- ALERT CONTAINER - Positioned top-right below header -->
+    <div id="alert-container"></div>
     
-    <!-- Log Files Section -->
-    <div id="logView" class="content-section">
-      <h2 class="section-title">Water Analysis Log Files</h2>
-      <div class="log-files-section">
-        <div class="log-controls">
-          <div class="search-box">
-            <input type="text" id="logSearch" placeholder="Search logs...">
-            <button class="download-btn" onclick="searchLogs()">🔍 Search</button>
-          </div>
-          <div class="date-filter">
-            <label>From:</label>
-            <input type="date" id="startDate">
-            <label>To:</label>
-            <input type="date" id="endDate">
-            <button class="download-btn" onclick="filterByDate()">Filter</button>
-          </div>
-          <button class="download-btn" onclick="downloadLogs()">📥 Download CSV</button>
-        </div>
-        
-        <div class="log-table-container">
-          <table class="log-table" id="logTable">
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Temperature (°C)</th>
-                <th>Turbidity (NTU)</th>
-                <th>EC (mS/cm)</th>
-                <th>GPS Coordinates</th>
-              </tr>
-            </thead>
-            <tbody id="logTableBody">
-              <!-- Log entries will be populated here -->
-            </tbody>
-          </table>
-        </div>
-      </div>
+    <div class="header">
+        <h1 class="app-title"><i class="fas fa-water"></i> Drone Water Analysis Dashboard</h1>
+        <nav class="nav-menu">
+            <button class="nav-btn active" data-view="graphs"><span><i class="fas fa-chart-line"></i></span> Sensor Analytics</button>
+            <button class="nav-btn" data-view="camera"><span><i class="fas fa-video"></i></span> Live Camera Feed</button>
+            <button class="nav-btn" data-view="log"><span><i class="fas fa-file-alt"></i></span> Log Files</button>
+            <button class="nav-btn" data-view="debug"><span><i class="fas fa-bug"></i></span> Serial Debug</button>
+        </nav>
     </div>
-  </div>
 
-  <script>
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.nav-btn, .content-section').forEach(el => el.classList.remove('active'));
-        btn.classList.add('active');
-        document.getElementById(btn.dataset.view + 'View').classList.add('active');
+    <div class="main-content">
+        <!-- Connection Status -->
+        <div class="connection-status-card">
+            <div class="status-indicators">
+                <div class="status-item">
+                    <span>Arduino Status</span>
+                    <div class="status-value" id="arduinoStatusText">Disconnected</div>
+                </div>
+                <div class="status-item">
+                    <span>Last Update</span>
+                    <div class="status-value" id="lastUpdateTime">--:--:--</div>
+                </div>
+                <div class="status-item">
+                    <span>Reconnect Attempts</span>
+                    <div class="status-value" id="reconnectAttempts">0</div>
+                </div>
+                <div class="status-item">
+                    <span>Port</span>
+                    <div class="status-value" id="serialPort">COM8</div>
+                </div>
+            </div>
+            <button class="reconnect-btn" id="reconnectBtn"><i class="fas fa-plug"></i> Reconnect</button>
+        </div>
+
+        <!-- Sensor Cards -->
+        <h2 class="section-title">Real-Time Sensor Values <span class="status-indicator"></span></h2>
+        <div class="sensor-cards">
+            <div class="card" id="tempCard">
+                <div class="threshold-indicator" id="tempThresholdIndicator"></div>
+                <h3><span><i class="fas fa-thermometer-half"></i></span> Temperature</h3>
+                <p class="value" id="tempValue">-- °C</p>
+                <p class="sub-value">Optimal: 26-29°C</p>
+            </div>
+            <div class="card turbidity-card" id="turbidityCard">
+                <div class="threshold-indicator" id="turbidityThresholdIndicator"></div>
+                <h3><span><i class="fas fa-wind"></i></span> Turbidity</h3>
+                <p class="value" id="turbidityValue">-- NTU</p>
+                <p class="sub-value">Optimal: &lt; 0-5 NTU</p>
+            </div>
+            <div class="card conductivity-card" id="conductivityCard">
+                <div class="threshold-indicator" id="conductivityThresholdIndicator"></div>
+                <h3><span><i class="fas fa-bolt"></i></span> Conductivity</h3>
+                <p class="value" id="conductivityValue">-- mS/cm</p>
+                <p class="sub-value">(Salinity: <span id="salinityValue">-- PSU</span>)</p>
+            </div>
+            <div class="card">
+                <h3><span><i class="fas fa-map-marker-alt"></i></span> GPS Position</h3>
+                <p class="value" id="gpsValue">--, --</p>
+                <div class="gps-status" id="gpsStatus">Status: Initializing GPS...</div>
+            </div>
+        </div>
+
+        <!-- Graphs + Peak Log Section -->
+        <div id="graphsView" class="content-section active">
+            <div class="update-info">
+                <div>Last data point: <span id="lastDataPoint">--:--:--</span></div>
+                <div>Peak logging: Every 5 minutes</div>
+            </div>
+            <div id="sensorGraphs" class="graph-container"></div>
+
+            <div class="peak-log-section">
+                <h2 class="section-title">Peak Log</h2>
+                <table class="peak-log-table" id="peakLogTable">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Peak Temperature (°C)</th>
+                            <th>Conductivity (mS/cm)</th>
+                            <th>Turbidity (NTU)</th>
+                            <th>GPS Location</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            
+            <!-- 3D Peak Graph Section -->
+            <div class="peak-log-section">
+                <h2 class="section-title">3D Peak Analysis</h2>
+                <p>Visualization of peak sensor values over time:</p>
+                <div id="peak3dGraph" class="peak-3d-graph-container"></div>
+            </div>
+        </div>
+
+        <!-- Camera Section -->
+        <div id="cameraView" class="content-section">
+            <h2 class="section-title">Live Camera Feed</h2>
+            <div class="camera-container">
+                <img src="/video_feed" class="camera-feed" alt="Drone camera feed"/>
+                <div class="gps-overlay"><i class="fas fa-satellite"></i> <span id="liveGps">GPS: --, --</span></div>
+            </div>
+            <h2 class="section-title" style="margin-top: 30px;">Survey Area Map</h2>
+            <div class="map-container">
+                <div class="drone-animation"><i class="fas fa-drone"></i></div>
+                <div id="map" class="map-placeholder">
+                    <h3>Water Quality Survey Map</h3>
+                    <p>This area shows the drone flight path and water quality measurements across the surveyed region.</p>
+                    <p>GPS coordinates update in real-time as the drone collects data.</p>
+                </div>
+            </div>
+        </div>
         
-        // When log tab is clicked, fetch and display logs
-        if (btn.dataset.view === 'log') {
-          fetchAndPopulateLogs();
-        }
-      });
-    });
+        <!-- Log Files Section -->
+        <div id="logView" class="content-section">
+            <h2 class="section-title">Water Analysis Log Files</h2>
+            <div class="log-files-section">
+                <div class="log-controls">
+                    <div class="search-box">
+                        <input type="text" id="logSearch" placeholder="Search logs...">
+                        <button class="download-btn" onclick="searchLogs()"><i class="fas fa-search"></i> Search</button>
+                    </div>
+                    <div class="date-filter">
+                        <label>From:</label>
+                        <input type="date" id="startDate">
+                        <label>To:</label>
+                        <input type="date" id="endDate">
+                        <button class="download-btn" onclick="filterByDate()"><i class="fas fa-filter"></i> Filter</button>
+                    </div>
+                    <button class="download-btn" onclick="downloadLogs()"><i class="fas fa-download"></i> Download CSV</button>
+                </div>
+                
+                <div class="log-table-container">
+                    <table class="log-table" id="logTable">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Temperature (°C)</th>
+                                <th>Turbidity (NTU)</th>
+                                <th>EC (mS/cm)</th>
+                                <th>GPS Coordinates</th>
+                                <th>GPS Type</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logTableBody">
+                            <!-- Log entries will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
 
-    let peakTemperature = -Infinity;
-    let lastLoggedTime = 0;
+        <!-- Serial Debug Section -->
+        <div id="debugView" class="content-section">
+            <h2 class="section-title"><i class="fas fa-bug"></i> Serial Debug Information</h2>
+            <div class="peak-log-section">
+                <h3>Connection Status</h3>
+                <div class="connection-status-card">
+                    <div class="status-indicators">
+                        <div class="status-item">
+                            <span>Arduino Status</span>
+                            <div class="status-value" id="debugArduinoStatus">Disconnected</div>
+                        </div>
+                        <div class="status-item">
+                            <span>Reconnect Attempts</span>
+                            <div class="status-value" id="debugReconnectAttempts">0</div>
+                        </div>
+                        <div class="status-item">
+                            <span>Port</span>
+                            <div class="status-value" id="debugSerialPort">COM8</div>
+                        </div>
+                    </div>
+                    <button class="reconnect-btn" id="debugReconnectBtn"><i class="fas fa-plug"></i> Reconnect</button>
+                </div>
+                
+                <h3>Available Ports</h3>
+                <div class="serial-debug" id="availablePorts">
+                    Loading available ports...
+                </div>
+                
+                <h3>Last Data Received</h3>
+                <div class="serial-debug" id="lastDataReceived">
+                    No data received yet
+                </div>
+                
+                <h3>Connection History</h3>
+                <div class="serial-debug" id="connectionHistory">
+                    No connection history available
+                </div>
+            </div>
+        </div>
+    </div>
 
-    // Fetch and populate log table with peak logs
-    function fetchAndPopulateLogs() {
-      fetch('/api/peak-logs')
-        .then(response => response.json())
-        .then(data => {
-          const tableBody = document.getElementById('logTableBody');
-          tableBody.innerHTML = '';
-          
-          data.forEach(log => {
-            const row = document.createElement('tr');
-            const date = new Date(log.time);
-            row.innerHTML = `
-              <td>${date.toLocaleString()}</td>
-              <td>${log.temperature}</td>
-              <td>${log.turbidity}</td>
-              <td>${log.ec}</td>
-              <td>${log.latitude}, ${log.longitude}</td>
-            `;
-            tableBody.appendChild(row);
-          });
-        })
-        .catch(error => {
-          console.error('Error fetching log data:', error);
-        });
-    }
+    <div class="dashboard-footer">
+        <p>Drone Water Analysis System | Real-time Monitoring Dashboard</p>
+        <p>Data updates every 2 seconds | System status: <span id="systemStatus" style="color:#4CAF50;">Operational</span></p>
+    </div>
 
-    // Search logs (client-side)
-    function searchLogs() {
-      const searchTerm = document.getElementById('logSearch').value.toLowerCase();
-      const rows = document.querySelectorAll('#logTableBody tr');
-      
-      rows.forEach(row => {
-        const text = row.textContent.toLowerCase();
-        row.style.display = text.includes(searchTerm) ? '' : 'none';
-      });
-    }
-
-    // Filter by date (client-side)
-    function filterByDate() {
-      const startDate = new Date(document.getElementById('startDate').value);
-      const endDate = new Date(document.getElementById('endDate').value);
-      const rows = document.querySelectorAll('#logTableBody tr');
-      
-      // If no date selected, show all
-      if (!startDate || !endDate) {
-        rows.forEach(row => row.style.display = '');
-        return;
-      }
-      
-      // Adjust endDate to include the entire day
-      const adjustedEndDate = new Date(endDate);
-      adjustedEndDate.setDate(adjustedEndDate.getDate() + 1);
-      
-      rows.forEach(row => {
-        const dateStr = row.cells[0].textContent;
-        const rowDate = new Date(dateStr);
+    <script>
+        // DOM Elements
+        const tempValue = document.getElementById('tempValue');
+        const turbidityValue = document.getElementById('turbidityValue');
+        const conductivityValue = document.getElementById('conductivityValue');
+        const salinityValue = document.getElementById('salinityValue');
+        const gpsValue = document.getElementById('gpsValue');
+        const gpsStatus = document.getElementById('gpsStatus');
+        const liveGps = document.getElementById('liveGps');
+        const lastUpdateTime = document.getElementById('lastUpdateTime');
+        const lastDataPoint = document.getElementById('lastDataPoint');
+        const arduinoStatusText = document.getElementById('arduinoStatusText');
+        const reconnectAttempts = document.getElementById('reconnectAttempts');
+        const serialPort = document.getElementById('serialPort');
+        const systemStatus = document.getElementById('systemStatus');
+        const debugArduinoStatus = document.getElementById('debugArduinoStatus');
+        const debugReconnectAttempts = document.getElementById('debugReconnectAttempts');
+        const debugSerialPort = document.getElementById('debugSerialPort');
+        const availablePorts = document.getElementById('availablePorts');
+        const lastDataReceived = document.getElementById('lastDataReceived');
+        const connectionHistory = document.getElementById('connectionHistory');
+        const alertContainer = document.getElementById('alert-container');
         
-        if (rowDate >= startDate && rowDate < adjustedEndDate) {
-          row.style.display = '';
-        } else {
-          row.style.display = 'none';
+        // Navigation
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.nav-btn, .content-section').forEach(el => el.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.view + 'View').classList.add('active');
+                
+                // When log tab is clicked, fetch and display logs
+                if (btn.dataset.view === 'log') {
+                    fetchAndPopulateLogs();
+                }
+                
+                // When debug tab is clicked, update debug info
+                if (btn.dataset.view === 'debug') {
+                    updateSerialDebugInfo();
+                }
+            });
+        });
+
+        // Reconnect buttons
+        document.getElementById('reconnectBtn').addEventListener('click', manualReconnect);
+        document.getElementById('debugReconnectBtn').addEventListener('click', manualReconnect);
+        
+        // Global state
+        let currentPeakTemp = -Infinity;
+        let lastPeakLogTime = 0;
+        let connectionHistoryData = [];
+        let baseLatitude = 4.2105;  // Base location for simulation
+        let baseLongitude = 6.4375; // Base location for simulation
+        let lastRealGpsTime = 0;
+        let gpsMode = 'simulated'; // 'simulated' or 'real'
+        let lastSuccessfulUpdate = null; // Track last successful update
+        
+        // NEW: Thresholds for ballast water detection
+        const thresholds = {
+            turbidity: 5.0,
+            temperature: 30.0,
+            conductivity: 2.0
+        };
+        
+        // NEW: Track active alerts
+        let activeAlerts = {};
+        let alertTimeout = null;
+        
+        // Fetch real-time data
+        async function fetchRealTimeData() {
+            try {
+                const response = await fetch('/api/real-time-data');
+                if (!response.ok) throw new Error('Network response was not ok');
+                
+                const data = await response.json();
+                updateSensorDisplay(data);
+                
+                // Update connection info
+                updateConnectionInfo(data);
+                
+                // NEW: Update thresholds from backend
+                if (data.thresholds) {
+                    Object.assign(thresholds, data.thresholds);
+                }
+                
+                // NEW: Check for threshold breaches
+                checkThresholds(data);
+                
+                // Store last successful update time
+                if (data.timestamp) {
+                    lastSuccessfulUpdate = new Date(data.timestamp);
+                }
+                
+                return true;
+            } catch (error) {
+                console.error('Error fetching real-time data:', error);
+                systemStatus.textContent = 'Connection Error';
+                systemStatus.style.color = '#f44336';
+                
+                // Show last successful update time if available
+                if (lastSuccessfulUpdate) {
+                    const updateStr = lastSuccessfulUpdate.toLocaleString();
+                    lastUpdateTime.textContent = updateStr;
+                    lastDataPoint.textContent = updateStr;
+                }
+                
+                return false;
+            }
         }
-      });
-    }
+        
+        // Update sensor display with new data
+        function updateSensorDisplay(data) {
+            // Update sensor values
+            if (data.turbidity !== null) {
+                turbidityValue.textContent = `${parseFloat(data.turbidity).toFixed(2)} NTU`;
+            }
+            if (data.temperature !== null) {
+                tempValue.textContent = `${parseFloat(data.temperature).toFixed(2)} °C`;
+            }
+            if (data.conductivity !== null) {
+                conductivityValue.textContent = `${parseFloat(data.conductivity).toFixed(2)} mS/cm`;
+                salinityValue.textContent = `${(parseFloat(data.conductivity) * 0.64).toFixed(2)} PSU`;
+            }
+            
+            // Update GPS - with simulation/real-time switching logic
+            updateGpsDisplay(data);
+            
+            // Update last update time with full date and time
+            if (data.timestamp) {
+                const updateTime = new Date(data.timestamp);
+                lastUpdateTime.textContent = updateTime.toLocaleString();
+                lastDataPoint.textContent = updateTime.toLocaleString();
+            }
+        }
 
-    // Download logs as CSV
-    function downloadLogs() {
-      fetch('/api/peak-logs')
-        .then(response => response.json())
-        .then(data => {
-          let csvContent = "Time,Temperature (°C),Turbidity (NTU),EC (mS/cm),Latitude,Longitude\n";
-          
-          data.forEach(log => {
-            const date = new Date(log.time);
-            csvContent += `"${date.toLocaleString()}","${log.temperature}","${log.turbidity}","${log.ec}","${log.latitude}","${log.longitude}"\n`;
-          });
-          
-          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement("a");
-          link.setAttribute("href", url);
-          link.setAttribute("download", "water_analysis_logs.csv");
-          link.style.visibility = 'hidden';
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        });
-    }
+        // Update GPS display with simulation/real-time switching
+        function updateGpsDisplay(data) {
+            let lat, lon, statusText, statusClass;
+            if (data.gps_mode === "real" && data.latitude && data.longitude) {
+                lat = parseFloat(data.latitude).toFixed(6);
+                lon = parseFloat(data.longitude).toFixed(6);
+                statusText = "Real GPS data";
+                statusClass = "real";
+            } else if (data.gps_mode === "simulated") {
+                lat = parseFloat(data.latitude).toFixed(6);
+                lon = parseFloat(data.longitude).toFixed(6);
+                statusText = "Simulated GPS (waiting for satellite fix)";
+                statusClass = "simulated";
+            } 
+            else {
+                lat = "0.000000";
+                lon = "0.000000";
+                statusText = "GPS status unknown";
+                statusClass = "unknown";
+            }
+            gpsValue.textContent = `${lat}, ${lon}`;
+            liveGps.textContent = `GPS: ${lat}, ${lon}`;
+            gpsStatus.textContent = `Status: ${statusText}`;
+            gpsStatus.className = `gps-status ${statusClass}`;
+        }
 
-    function updateRealTimeData() {
-      fetch('/api/real-time-data')
-        .then(response => response.json())
-        .then(data => {
-          const { turbidity, temperature, conductivity, timestamp, connected } = data;
-          const now = Date.now();
+        // Update connection info
+        function updateConnectionInfo(data) {
+            const status = data.connected ? 'Connected' : 'Disconnected';
+            const statusColor = data.connected ? '#4CAF50' : '#f44336';
+            
+            arduinoStatusText.textContent = status;
+            arduinoStatusText.style.color = statusColor;
+            
+            debugArduinoStatus.textContent = status;
+            debugArduinoStatus.style.color = statusColor;
+            
+            // Update debug info
+            debugReconnectAttempts.textContent = data.reconnect_attempts || '0';
+            debugSerialPort.textContent = data.port || 'COM8';
+            reconnectAttempts.textContent = data.reconnect_attempts || '0';
+            serialPort.textContent = data.port || 'COM8';
+            
+            // Update system status
+            systemStatus.textContent = data.connected ? 'Operational' : 'Disconnected';
+            systemStatus.style.color = data.connected ? '#4CAF50' : '#f44336';
+        }
+        
+        // NEW: Check for threshold breaches (requires at least two sensors)
+        function checkThresholds(data) {
+            const now = Date.now();
+            
+            // Clear previous alerts if no breaches
+            if (!data.turbidity && !data.temperature && !data.conductivity) {
+                alertContainer.innerHTML = '';
+                activeAlerts = {};
+                return;
+            }
+            
+            // Check each sensor
+            const sensors = [
+                { id: 'turbidity', value: data.turbidity, threshold: thresholds.turbidity, name: 'Turbidity', unit: 'NTU' },
+                { id: 'temperature', value: data.temperature, threshold: thresholds.temperature, name: 'Temperature', unit: '°C' },
+                { id: 'conductivity', value: data.conductivity, threshold: thresholds.conductivity, name: 'Conductivity', unit: 'mS/cm' }
+            ];
+            
+            // Count how many thresholds are exceeded
+            let exceededCount = 0;
+            let exceededSensors = [];
+            
+            sensors.forEach(sensor => {
+                if (sensor.value !== null && sensor.value > sensor.threshold) {
+                    exceededCount++;
+                    exceededSensors.push(sensor);
+                    
+                    // Update card indicator
+                    const indicator = document.getElementById(`${sensor.id}ThresholdIndicator`);
+                    if (indicator) {
+                        indicator.style.display = 'block';
+                        document.getElementById(`${sensor.id}Card`).classList.add('alert-card');
+                    }
+                } else {
+                    // Remove individual alerts
+                    if (activeAlerts[sensor.id]) {
+                        const alertEl = document.getElementById(`alert-${sensor.id}`);
+                        if (alertEl) alertEl.remove();
+                        delete activeAlerts[sensor.id];
+                    }
+                    
+                    // Update card indicator
+                    const indicator = document.getElementById(`${sensor.id}ThresholdIndicator`);
+                    if (indicator) {
+                        indicator.style.display = 'none';
+                        document.getElementById(`${sensor.id}Card`).classList.remove('alert-card');
+                    }
+                }
+            });
+            
+            // NEW: Show combined alert if at least two sensors exceed thresholds
+            if (exceededCount >= 2 && !activeAlerts['ballast']) {
+                const alertDiv = document.createElement('div');
+                alertDiv.className = 'combined-alert';
+                alertDiv.id = 'alert-ballast';
+                
+                let sensorList = exceededSensors.map(s => 
+                    `<div>• ${s.name}: ${s.value.toFixed(2)} ${s.unit} > ${s.threshold} ${s.unit}</div>`
+                ).join('');
+                
+                alertDiv.innerHTML = `
+                    <button class="alert-close" onclick="this.parentElement.remove(); delete activeAlerts['ballast'];">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    <i class="fas fa-exclamation-triangle" style="margin-right: 10px; font-size: 1.5rem;"></i>
+                    <div>
+                        <strong>BALLAST WATER DETECTED!</strong>
+                        <div class="alert-sensors">${sensorList}</div>
+                    </div>
+                `;
+                alertContainer.appendChild(alertDiv);
+                activeAlerts['ballast'] = now;
+            } 
+            // Remove alert if no longer valid
+            else if (exceededCount < 2 && activeAlerts['ballast']) {
+                const alertEl = document.getElementById('alert-ballast');
+                if (alertEl) alertEl.remove();
+                delete activeAlerts['ballast'];
+                
+                // Clear all card indicators
+                sensors.forEach(sensor => {
+                    const indicator = document.getElementById(`${sensor.id}ThresholdIndicator`);
+                    if (indicator) {
+                        indicator.style.display = 'none';
+                        document.getElementById(`${sensor.id}Card`).classList.remove('alert-card');
+                    }
+                });
+            }
+            
+            // Clear alerts after 3 seconds if no longer valid
+            clearTimeout(alertTimeout);
+            alertTimeout = setTimeout(() => {
+                Object.keys(activeAlerts).forEach(alertId => {
+                    const alertEl = document.getElementById(`alert-${alertId}`);
+                    if (alertEl) alertEl.remove();
+                    delete activeAlerts[alertId];
+                    
+                    // Clear card indicators for ballast alert
+                    if (alertId === 'ballast') {
+                        sensors.forEach(sensor => {
+                            const indicator = document.getElementById(`${sensor.id}ThresholdIndicator`);
+                            if (indicator) {
+                                indicator.style.display = 'none';
+                                document.getElementById(`${sensor.id}Card`).classList.remove('alert-card');
+                            }
+                        });
+                    }
+                });
+            }, 3000);
+        }
+        
+        // Fetch historical data
+        async function fetchHistoricalData() {
+            try {
+                const response = await fetch('/api/historical-data');
+                if (!response.ok) throw new Error('Network response was not ok');
+                
+                const data = await response.json();
+                updateHistoricalGraph(data);
+            } catch (error) {
+                console.error('Error fetching historical data:', error);
+            }
+        }
+        
+        // Update historical graph
+        function updateHistoricalGraph(data) {
+            if (!data || data.length === 0) return;
+            
+            const times = data.map(p => new Date(p.time).toLocaleTimeString());
+            Plotly.newPlot('sensorGraphs', [
+                { 
+                    x: times, 
+                    y: data.map(p => p.turbidity), 
+                    name: 'Turbidity', 
+                    line: { color: '#2196F3' }, 
+                    mode: 'lines+markers',
+                    marker: {
+                        size: 8,
+                        color: data.map(p => p.above_threshold ? '#FF5722' : '#2196F3')
+                    }
+                },
+                { 
+                    x: times, 
+                    y: data.map(p => p.temperature), 
+                    name: 'Temperature', 
+                    line: { color: '#FF5252' }, 
+                    mode: 'lines+markers',
+                    marker: {
+                        size: 8,
+                        color: data.map(p => p.above_threshold ? '#FF5722' : '#FF5252')
+                    }
+                },
+                { 
+                    x: times, 
+                    y: data.map(p => p.conductivity), 
+                    name: 'Conductivity', 
+                    line: { color: '#4CAF50' }, 
+                    mode: 'lines+markers',
+                    marker: {
+                        size: 8,
+                        color: data.map(p => p.above_threshold ? '#FF5722' : '#4CAF50')
+                    }
+                },
+                // Threshold lines
+                {
+                    x: times,
+                    y: Array(times.length).fill(thresholds.turbidity),
+                    name: 'Turbidity Threshold',
+                    line: {
+                        color: '#2196F3',
+                        width: 2,
+                        dash: 'dash'
+                    },
+                    mode: 'lines',
+                    showlegend: true
+                },
+                {
+                    x: times,
+                    y: Array(times.length).fill(thresholds.temperature),
+                    name: 'Temperature Threshold',
+                    line: {
+                        color: '#FF5252',
+                        width: 2,
+                        dash: 'dash'
+                    },
+                    mode: 'lines',
+                    showlegend: true
+                },
+                {
+                    x: times,
+                    y: Array(times.length).fill(thresholds.conductivity),
+                    name: 'Conductivity Threshold',
+                    line: {
+                        color: '#4CAF50',
+                        width: 2,
+                        dash: 'dash'
+                    },
+                    mode: 'lines',
+                    showlegend: true
+                }
+            ], {
+                title: 'Sensor Trends Over Time',
+                xaxis: { title: 'Time' },
+                yaxis: { 
+                    title: 'Sensor Values', 
+                    range: [0, Math.max(
+                        50, 
+                        ...data.map(p => p.turbidity),
+                        ...data.map(p => p.temperature),
+                        ...data.map(p => p.conductivity)
+                    )],
+                    dtick: 5
+                },
+                paper_bgcolor: 'rgba(0,0,0,0)', 
+                plot_bgcolor: 'rgba(0,0,0,0.02)', 
+                margin: { t: 40, l: 60, r: 30, b: 60 },
+                legend: { orientation: 'h', y: -0.2 }
+            });
+        }
+        
+        // Fetch and populate logs
+        async function fetchAndPopulateLogs() {
+            try {
+                const response = await fetch('/api/peak-logs');
+                if (!response.ok) throw new Error('Network response was not ok');
+                
+                const data = await response.json();
+                populateLogTable(data);
+            } catch (error) {
+                console.error('Error fetching log data:', error);
+            }
+        }
+        
+        // Populate log table
+        function populateLogTable(logs) {
+            const tableBody = document.getElementById('logTableBody');
+            tableBody.innerHTML = '';
+            
+            logs.forEach(log => {
+                const row = document.createElement('tr');
+                const date = new Date(log.time);
+                const gpsType = log.latitude > 4.2 && log.latitude < 4.3 ? 'simulated' : 'real';
+                
+                row.innerHTML = `
+                    <td>${date.toLocaleString()}</td>
+                    <td>${log.temperature}</td>
+                    <td>${log.turbidity}</td>
+                    <td>${log.ec}</td>
+                    <td>${log.latitude}, ${log.longitude}</td>
+                    <td>${gpsType}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+        
+        // Search logs (client-side)
+        function searchLogs() {
+            const searchTerm = document.getElementById('logSearch').value.toLowerCase();
+            const rows = document.querySelectorAll('#logTableBody tr');
+            
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(searchTerm) ? '' : 'none';
+            });
+        }
+        
+        // Filter by date (client-side)
+        function filterByDate() {
+            const startDate = new Date(document.getElementById('startDate').value);
+            const endDate = new Date(document.getElementById('endDate').value);
+            const rows = document.querySelectorAll('#logTableBody tr');
+            
+            // If no date selected, show all
+            if (!startDate || !endDate) {
+                rows.forEach(row => row.style.display = '');
+                return;
+            }
+            
+            // Adjust endDate to include the entire day
+            const adjustedEndDate = new Date(endDate);
+            adjustedEndDate.setDate(adjustedEndDate.getDate() + 1);
+            
+            rows.forEach(row => {
+                const dateStr = row.cells[0].textContent;
+                const rowDate = new Date(dateStr);
+                
+                if (rowDate >= startDate && rowDate < adjustedEndDate) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+        
+        // Download logs as CSV
+        async function downloadLogs() {
+            try {
+                const response = await fetch('/api/peak-logs');
+                if (!response.ok) throw new Error('Network response was not ok');
+                
+                const logs = await response.json();
+                
+                let csvContent = "Time,Temperature (°C),Turbidity (NTU),EC (mS/cm),Latitude,Longitude,Type\n";
+                
+                logs.forEach(log => {
+                    const date = new Date(log.time);
+                    const gpsType = log.latitude > 4.2 && log.latitude < 4.3 ? 'simulated' : 'real';
+                    csvContent += `"${date.toLocaleString()}","${log.temperature}","${log.turbidity}","${log.ec}","${log.latitude}","${log.longitude}","${gpsType}"\n`;
+                });
+                
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.setAttribute("href", url);
+                link.setAttribute("download", "water_analysis_logs.csv");
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } catch (error) {
+                console.error('Error downloading logs:', error);
+                alert('Failed to download logs. Please try again.');
+            }
+        }
+        
+        // Update 3D peak graph
+        async function update3dPeakGraph() {
+            try {
+                const response = await fetch('/api/3d-peak-data');
+                if (!response.ok) throw new Error('Network response was not ok');
+                
+                const data = await response.json();
+                render3dGraph(data);
+            } catch (error) {
+                console.error('Error fetching 3D peak data:', error);
+            }
+        }
+        
+        // Render 3D graph
+        function render3dGraph(data) {
+            if (!data || !data.timestamps || data.timestamps.length === 0) return;
+            
+            // Create the 3D trace for the line
+            const lineTrace = {
+                x: data.conductivity,
+                y: data.temperature,
+                z: data.turbidity,
+                mode: 'lines+markers',
+                type: 'scatter3d',
+                name: 'Peak Path',
+                line: {
+                    width: 8,
+                    color: data.timestamps,
+                    colorscale: 'Jet',
+                    cmin: Math.min(...data.timestamps),
+                    cmax: Math.max(...data.timestamps),
+                    colorbar: {
+                        title: 'Time',
+                        thickness: 15,
+                        tickvals: [Math.min(...data.timestamps), Math.max(...data.timestamps)],
+                        ticktext: [
+                            new Date(Math.min(...data.timestamps) * 1000).toLocaleDateString(),
+                            new Date(Math.max(...data.timestamps) * 1000).toLocaleDateString()
+                        ]
+                    }
+                },
+                marker: {
+                    size: 5,
+                    color: data.timestamps,
+                    colorscale: 'Jet',
+                    symbol: 'circle',
+                    line: {
+                        color: 'rgba(0,0,0,0.5)',
+                        width: 1
+                    }
+                },
+                hoverinfo: 'text',
+                text: data.timestamps.map((ts, i) => 
+                    `Time: ${new Date(ts * 1000).toLocaleString()}<br>` +
+                    `EC: ${data.conductivity[i].toFixed(2)} mS/cm<br>` +
+                    `Temp: ${data.temperature[i].toFixed(2)}°C<br>` +
+                    `Turbidity: ${data.turbidity[i].toFixed(2)} NTU<br>` +
+                    `Location: ${data.latitudes[i].toFixed(6)}, ${data.longitudes[i].toFixed(6)}`
+                )
+            };
 
-          document.getElementById('turbidityValue').textContent = `${parseFloat(turbidity).toFixed(2)} NTU`;
-          document.getElementById('tempValue').textContent = `${parseFloat(temperature).toFixed(2)} °C`;
-          document.getElementById('conductivityValue').textContent = `${parseFloat(conductivity).toFixed(2)} mS/cm`;
-          document.getElementById('salinityValue').textContent = `${(parseFloat(conductivity) * 0.64).toFixed(2)} PSU`;
+            const layout = {
+                title: '5-Minute Peak Sensor Values (X: EC, Y: Temp, Z: Turbidity)',
+                margin: { l: 0, r: 0, b: 0, t: 40 },
+                scene: {
+                    xaxis: { title: 'EC (mS/cm)' },
+                    yaxis: { title: 'Temperature (°C)' },
+                    zaxis: { title: 'Turbidity (NTU)' },
+                    camera: {
+                        eye: { x: 1.5, y: 1.5, z: 0.8 }
+                    }
+                },
+                legend: {
+                    orientation: 'h',
+                    yanchor: 'top',
+                    y: -0.1
+                },
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0.02)'
+            };
 
-          const statusDot = document.querySelector('#arduinoStatus .status-dot');
-          const statusText = document.querySelector('#arduinoStatus span:last-child');
-
-          if (connected) {
-            statusDot.className = 'status-dot connected';
-            statusText.textContent = 'Arduino: Connected';
-            document.getElementById('turbidityStatus').style.display = 'inline-block';
-          } else {
-            statusDot.className = 'status-dot disconnected';
-            statusText.textContent = 'Arduino: Disconnected';
-            document.getElementById('turbidityStatus').style.display = 'none';
-          }
-
-          if (timestamp) {
-            const date = new Date(timestamp);
-            document.getElementById('lastUpdate').textContent = `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
-          }
-
-          // Peak log every 5 minutes
-          if (parseFloat(temperature) > peakTemperature) {
-            peakTemperature = parseFloat(temperature);
-          }
-
-          if (now - lastLoggedTime >= 5 * 60 * 1000) {
-            const table = document.getElementById('peakLogTable').querySelector('tbody');
-            const row = document.createElement('tr');
-            row.innerHTML = `
-              <td>${new Date().toLocaleTimeString()}</td>
-              <td>${peakTemperature.toFixed(2)}</td>
-              <td>${parseFloat(conductivity).toFixed(2)}</td>
-              <td>${parseFloat(turbidity).toFixed(2)}</td>
-            `;
-            table.appendChild(row);
-            lastLoggedTime = now;
-            peakTemperature = -Infinity;
-          }
-        })
-        .catch(error => {
-          console.error('Error fetching real-time data:', error);
-          const statusDot = document.querySelector('#arduinoStatus .status-dot');
-          const statusText = document.querySelector('#arduinoStatus span:last-child');
-          statusDot.className = 'status-dot disconnected';
-          statusText.textContent = 'Arduino: Connection Error';
-          document.getElementById('turbidityStatus').style.display = 'none';
-        });
-    }
-
-    function updateDashboard() {
-      const lat = 40.7128 + (Math.random() - 0.5) * 0.01;
-      const lon = -74.0060 + (Math.random() - 0.5) * 0.01;
-      const altitude = (Math.random() * 50 + 30).toFixed(0);
-
-      document.getElementById('gpsValue').textContent = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
-      document.getElementById('altitudeValue').textContent = `${altitude} m`;
-      document.getElementById('liveGps').textContent = `🛰 GPS: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
-
-      fetch('/api/historical-data')
-        .then(res => res.json())
-        .then(data => {
-          const points = data.slice(-20);
-          const times = points.map(p => new Date(p.time).toLocaleTimeString());
-          Plotly.newPlot('sensorGraphs', [
-            { x: times, y: points.map(p => p.turbidity), name: 'Turbidity', line: { color: '#2196F3' }, mode: 'lines+markers' },
-            { x: times, y: points.map(p => p.temperature), name: 'Temperature', line: { color: '#FF5252' }, mode: 'lines+markers' },
-            { x: times, y: points.map(p => p.conductivity), name: 'Conductivity', line: { color: '#4CAF50' }, mode: 'lines+markers' }
-          ], {
-            title: 'Sensor Trends Over Time',
-            xaxis: { title: 'Time' },
-            yaxis: { title: 'Sensor Values', range: [0, Math.max(30, ...points.map(p=>p.turbidity), ...points.map(p=>p.temperature), ...points.map(p=>p.conductivity))], autorange: false },
-            paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0.02)', margin: { t: 40, l: 60, r: 30, b: 60 },
-            legend: { orientation: 'h', y: -0.2 }
-          });
-        });
-    }
-
-    // Set default dates for log filters
-    const today = new Date();
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    
-    document.getElementById('startDate').valueAsDate = oneWeekAgo;
-    document.getElementById('endDate').valueAsDate = today;
-
-    // Initialize
-    updateRealTimeData();
-    updateDashboard();
-    setInterval(updateRealTimeData, 2000);
-    setInterval(updateDashboard, 10000);
-  </script>
+            Plotly.newPlot('peak3dGraph', [lineTrace], layout);
+        }
+        
+        // Manual reconnect
+        async function manualReconnect() {
+            try {
+                const response = await fetch('/api/reconnect-arduino');
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    alert('Reconnection attempt successful!');
+                    fetchRealTimeData();
+                } else {
+                    alert('Failed to reconnect. Please check the connection.');
+                }
+            } catch (error) {
+                console.error('Error during manual reconnect:', error);
+                alert('An error occurred while trying to reconnect.');
+            }
+        }
+        
+        // Update serial debug info
+        async function updateSerialDebugInfo() {
+            try {
+                const response = await fetch('/api/serial-debug');
+                if (!response.ok) throw new Error('Network response was not ok');
+                
+                const data = await response.json();
+                
+                // Update available ports
+                if (data.available_ports && data.available_ports.length > 0) {
+                    availablePorts.innerHTML = data.available_ports.join(', ');
+                }
+                
+                // Update last data received
+                if (data.last_update) {
+                    lastDataReceived.textContent = new Date(data.last_update).toLocaleString();
+                }
+                
+                // Update connection history
+                connectionHistoryData.push({
+                    time: new Date().toLocaleTimeString(),
+                    status: data.connected ? 'Connected' : 'Disconnected',
+                    port: data.port
+                });
+                
+                // Keep only last 5 entries
+                if (connectionHistoryData.length > 5) {
+                    connectionHistoryData.shift();
+                }
+                
+                // Format connection history
+                const historyHtml = connectionHistoryData.map(entry => 
+                    `<div>${entry.time}: ${entry.status} on ${entry.port}</div>`
+                ).join('');
+                
+                connectionHistory.innerHTML = historyHtml;
+                
+            } catch (error) {
+                console.error('Error fetching serial debug info:', error);
+            }
+        }
+        
+        // Initialize dashboard
+        async function initializeDashboard() {
+            // Set default dates for log filters
+            const today = new Date();
+            const oneWeekAgo = new Date();
+            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+            
+            document.getElementById('startDate').valueAsDate = oneWeekAgo;
+            document.getElementById('endDate').valueAsDate = today;
+            
+            // Load initial data
+            await fetchRealTimeData();
+            await fetchHistoricalData();
+            await update3dPeakGraph();
+            await fetchAndPopulateLogs();
+            await updateSerialDebugInfo();
+            
+            // Start periodic updates
+            setInterval(fetchRealTimeData, 2000);
+            setInterval(fetchHistoricalData, 10000);
+            setInterval(update3dPeakGraph, 300000); // Update every 5 minutes
+            setInterval(updateSerialDebugInfo, 5000); // Update debug info every 5 seconds
+        }
+        
+        // Initialize when page loads
+        window.addEventListener('DOMContentLoaded', initializeDashboard);
+    </script>
 </body>
-</html>
+</html>sssss
