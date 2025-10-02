@@ -10,6 +10,8 @@ import logging
 import os
 import serial.tools.list_ports
 import json
+import cv2
+import numpy as np
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sensors.db'
@@ -59,6 +61,10 @@ current_peak_temp = -float('inf')
 current_peak_turbidity = -float('inf')
 current_peak_ec = -float('inf')
 last_peak_log_time = datetime.now()
+
+# Camera Setup
+camera = None
+camera_lock = threading.Lock()
 
 # Database models
 class SensorData(db.Model):
@@ -298,7 +304,6 @@ def generate_peak_log():
             'gps_type': gps_type
         }
 
-
 # Logger every 3 seconds
 def sensor_logger():
     global current_peak_temp, current_peak_turbidity, current_peak_ec, last_peak_log_time
@@ -408,6 +413,121 @@ def cleanup_old_data():
         deleted_peaks = PeakLog.query.filter(PeakLog.timestamp < cutoff_time).delete()
         db.session.commit()
         logger.info(f"Deleted {deleted_sensor} SensorData and {deleted_peaks} PeakLog entries.")
+
+# Camera Functions
+def init_camera():
+    """Initialize the Raspberry Pi camera"""
+    global camera
+    try:
+        # Try picamera2 first (recommended for Raspberry Pi)
+        from picamera2 import Picamera2
+        camera = Picamera2()
+        
+        # Configure video stream for live preview
+        video_config = camera.create_video_configuration(
+            main={"size": (640, 480)},
+            controls={"FrameRate": 25}
+        )
+        camera.configure(video_config)
+        camera.start()
+        logger.info("Raspberry Pi camera (picamera2) initialized successfully")
+        return True
+    except ImportError:
+        logger.warning("picamera2 not available, trying OpenCV fallback")
+        try:
+            # Fallback to OpenCV
+            camera = cv2.VideoCapture(0)
+            camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            camera.set(cv2.CAP_PROP_FPS, 25)
+            logger.info("Camera fallback to OpenCV successful")
+            return True
+        except Exception as e:
+            logger.error(f"OpenCV camera also failed: {str(e)}")
+            return False
+    except Exception as e:
+        logger.error(f"Failed to initialize picamera2: {str(e)}")
+        return False
+
+def generate_frames():
+    """Generate camera frames for streaming"""
+    global camera
+    frame_count = 0
+    last_time = time.time()
+    
+    while True:
+        try:
+            frame = None
+            
+            # Check if we're using picamera2
+            if camera and hasattr(camera, 'capture_array'):
+                # picamera2 method
+                with camera_lock:
+                    frame = camera.capture_array()
+                
+                # picamera2 returns RGB, convert to BGR for OpenCV
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                
+            elif camera and hasattr(camera, 'read'):
+                # OpenCV method (fallback)
+                with camera_lock:
+                    success, frame = camera.read()
+                if not success:
+                    frame = None
+                    
+            if frame is not None:
+                # Add timestamp to frame
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                cv2.putText(frame, f"Drone Camera - {timestamp}", (10, 30), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                
+                # Encode frame as JPEG
+                ret, buffer = cv2.imencode('.jpg', frame, [
+                    cv2.IMWRITE_JPEG_QUALITY, 80
+                ])
+                if ret:
+                    frame_bytes = buffer.tobytes()
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+                    
+                    # Calculate FPS (for logging)
+                    frame_count += 1
+                    current_time = time.time()
+                    if current_time - last_time >= 10.0:  # Log every 10 seconds
+                        fps = frame_count / (current_time - last_time)
+                        logger.info(f"Camera streaming at {fps:.1f} FPS")
+                        frame_count = 0
+                        last_time = current_time
+                        
+            else:
+                # Create a placeholder frame when camera is not available
+                frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                cv2.putText(frame, "Raspberry Pi Camera Feed", (120, 200), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                cv2.putText(frame, "Initializing...", (250, 240), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                cv2.putText(frame, timestamp, (200, 280), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (150, 150, 150), 1)
+                ret, buffer = cv2.imencode('.jpg', frame)
+                frame_bytes = buffer.tobytes()
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+                
+        except Exception as e:
+            logger.error(f"Error in frame generation: {str(e)}")
+            # Create error frame
+            frame = np.zeros((480, 640, 3), dtype=np.uint8)
+            cv2.putText(frame, "Camera Error - Check Connection", (80, 220), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            cv2.putText(frame, str(e)[:100], (50, 260), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+            ret, buffer = cv2.imencode('.jpg', frame)
+            frame_bytes = buffer.tobytes()
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        
+        time.sleep(0.04)  # ~25 FPS
 
 # Routes
 @app.route('/')
@@ -545,19 +665,34 @@ def manual_reconnect():
     else:
         return jsonify({'status': 'error', 'message': 'Failed to reconnect'})
 
+# Camera status endpoint
+@app.route('/api/camera-status')
+def camera_status():
+    """API endpoint to check camera status"""
+    global camera
+    status = "unknown"
+    camera_type = "none"
+    
+    if camera is None:
+        status = "not_initialized"
+    elif hasattr(camera, 'started') and camera.started:
+        status = "running"
+        camera_type = "picamera2"
+    elif hasattr(camera, 'isOpened') and camera.isOpened():
+        status = "running"
+        camera_type = "opencv"
+    else:
+        status = "error"
+    
+    return jsonify({
+        'status': status,
+        'type': camera_type
+    })
+
 @app.route('/video_feed')
 def video_feed():
-    def generate_camera_frames():
-        while True:
-            try:
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' +
-                       open("static/placeholder.jpg", "rb").read() + b'\r\n')
-                time.sleep(1)
-            except FileNotFoundError:
-                yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n\r\n')
-                time.sleep(1)
-    return Response(generate_camera_frames(),
+    """Video streaming route"""
+    return Response(generate_frames(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 # Run
@@ -569,6 +704,13 @@ if __name__ == '__main__':
         else:
             logger.info("Using existing database")
         initialize_from_database()
+    
+    # Initialize camera
+    camera_init_success = init_camera()
+    if camera_init_success:
+        logger.info("Camera initialized successfully - live feed available")
+    else:
+        logger.warning("Camera initialization failed - video feed will show placeholder")
     
     connect_to_arduino()
     threading.Thread(target=serial_reader, daemon=True).start()
