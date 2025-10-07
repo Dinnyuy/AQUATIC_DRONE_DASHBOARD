@@ -128,7 +128,6 @@
             font-weight: 500;
         }
 
-        /* Rest of your existing CSS remains the same */
         .main-content {
             max-width: 1400px;
             margin: 2rem auto;
@@ -340,16 +339,14 @@
             overflow: hidden;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
             background: #000;
-            min-height: 450px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .camera-feed {
             width: 100%;
             height: 450px;
-            object-fit: contain;
+        }
+
+        .camera-feed {
+            width: 100%;
+            height: 100%;
+            object-fit: cover; /* Best option - fills container while maintaining aspect ratio */
             display: block;
         }
         
@@ -1072,6 +1069,15 @@
                 <div class="serial-debug" id="cameraDebugStatus">
                     Loading camera status...
                 </div>
+
+                <!-- NEW: Camera Controls Section -->
+                <h3>Camera Controls</h3>
+                <div class="serial-debug">
+                    <button class="reconnect-btn" onclick="manualCameraReconnect()">
+                        <i class="fas fa-camera"></i> Reconnect Camera
+                    </button>
+                    <div id="cameraReconnectStatus" style="margin-top: 10px;"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -1093,7 +1099,6 @@
     </div>
 
     <script>
-        // Your existing JavaScript code remains exactly the same
         // DOM Elements
         const tempValue = document.getElementById('tempValue');
         const turbidityValue = document.getElementById('turbidityValue');
@@ -1710,7 +1715,7 @@
             }
         }
         
-        // Check camera status
+        // Check camera status - UPDATED VERSION
         async function checkCameraStatus() {
             try {
                 const response = await fetch('/api/camera-status');
@@ -1723,19 +1728,38 @@
                     } else if (data.status === 'error') {
                         cameraStatusText.innerHTML = '<i class="fas fa-circle" style="color: #f44336"></i> Camera: Error';
                         cameraStatusText.style.color = '#f44336';
+                    } else if (data.status === 'not_initialized') {
+                        cameraStatusText.innerHTML = '<i class="fas fa-circle" style="color: #FF9800"></i> Camera: Not Initialized';
+                        cameraStatusText.style.color = '#FF9800';
                     } else {
-                        cameraStatusText.innerHTML = '<i class="fas fa-circle" style="color: #FF9800"></i> Camera: Initializing';
+                        cameraStatusText.innerHTML = '<i class="fas fa-circle" style="color: #FF9800"></i> Camera: Unknown';
                         cameraStatusText.style.color = '#FF9800';
                     }
                 }
                 
                 if (cameraType) {
-                    cameraType.textContent = `(${data.type})`;
+                    // Show detailed camera type information
+                    let cameraTypeText = '';
+                    if (data.type === 'picamera2') {
+                        cameraTypeText = '(Raspberry Pi Camera)';
+                    } else if (data.type === 'picamera') {
+                        cameraTypeText = '(Legacy Pi Camera)';
+                    } else if (data.type.includes('usb_webcam')) {
+                        cameraTypeText = '(USB Webcam)';
+                    } else {
+                        cameraTypeText = `(${data.type})`;
+                    }
+                    cameraType.textContent = cameraTypeText;
                 }
                 
-                // Update debug status
+                // Update debug status with more details
                 if (cameraDebugStatus) {
-                    cameraDebugStatus.textContent = `Status: ${data.status} | Type: ${data.type}`;
+                    cameraDebugStatus.innerHTML = `
+                        <strong>Status:</strong> ${data.status}<br>
+                        <strong>Type:</strong> ${data.type}<br>
+                        <strong>Initialized:</strong> ${data.initialized}<br>
+                        <strong>Details:</strong> ${data.details}
+                    `;
                 }
                 
             } catch (error) {
@@ -1744,6 +1768,72 @@
                     cameraStatusText.innerHTML = '<i class="fas fa-circle" style="color: #f44336"></i> Camera: Offline';
                     cameraStatusText.style.color = '#f44336';
                 }
+                if (cameraDebugStatus) {
+                    cameraDebugStatus.textContent = 'Error fetching camera status';
+                }
+            }
+        }
+        
+        // Manual camera reconnect - NEW FUNCTION
+        async function manualCameraReconnect() {
+            const statusElement = document.getElementById('cameraReconnectStatus');
+            
+            try {
+                if (statusElement) {
+                    statusElement.innerHTML = '<i class="fas fa-sync fa-spin"></i> Reconnecting camera...';
+                    statusElement.style.color = '#FF9800';
+                }
+                
+                const response = await fetch('/api/reconnect-camera');
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    if (statusElement) {
+                        statusElement.innerHTML = '<i class="fas fa-check"></i> Camera reconnected successfully!';
+                        statusElement.style.color = '#4CAF50';
+                    }
+                    // Update camera status after a short delay
+                    setTimeout(checkCameraStatus, 1000);
+                } else {
+                    if (statusElement) {
+                        statusElement.innerHTML = '<i class="fas fa-times"></i> Failed to reconnect camera';
+                        statusElement.style.color = '#f44336';
+                    }
+                }
+                
+                // Clear status after 5 seconds
+                setTimeout(() => {
+                    if (statusElement) {
+                        statusElement.innerHTML = '';
+                    }
+                }, 5000);
+                
+            } catch (error) {
+                console.error('Error during camera reconnect:', error);
+                if (statusElement) {
+                    statusElement.innerHTML = '<i class="fas fa-times"></i> Error reconnecting camera';
+                    statusElement.style.color = '#f44336';
+                }
+            }
+        }
+        
+        // Handle camera feed errors - NEW FUNCTION
+        function handleCameraFeedError() {
+            const cameraFeed = document.querySelector('.camera-feed');
+            if (cameraFeed) {
+                cameraFeed.onerror = function() {
+                    console.error('Camera feed error');
+                    // You could show a placeholder image or message here
+                    if (cameraStatusText) {
+                        cameraStatusText.innerHTML = '<i class="fas fa-circle" style="color: #f44336"></i> Camera: Feed Error';
+                        cameraStatusText.style.color = '#f44336';
+                    }
+                };
+                
+                cameraFeed.onload = function() {
+                    console.log('Camera feed loaded successfully');
+                    // Feed is working, status will be updated by checkCameraStatus
+                };
             }
         }
         
@@ -1792,7 +1882,7 @@
             }
         }
         
-        // Initialize dashboard
+        // Initialize dashboard - UPDATED VERSION
         async function initializeDashboard() {
             // Set default dates for log filters
             const today = new Date();
@@ -1809,6 +1899,7 @@
             await fetchAndPopulateLogs();
             await updateSerialDebugInfo();
             await checkCameraStatus();
+            handleCameraFeedError(); // Add this line
             
             // Start periodic updates
             setInterval(fetchRealTimeData, 2000);

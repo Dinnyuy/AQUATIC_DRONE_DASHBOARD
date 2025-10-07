@@ -30,7 +30,7 @@ CONDUCTIVITY_THRESHOLD = 8.0  # mS/cm (salinity change)
 BALLAST_ALERT_THRESHOLD = 3  # NEW: Minimum sensors that must exceed thresholds
 
 # Serial Setup
-SERIAL_PORT = 'COM8'
+SERIAL_PORT = '/dev/ttyACM0'
 BAUD_RATE = 9600
 ser = None
 arduino_connected = False
@@ -62,9 +62,11 @@ current_peak_turbidity = -float('inf')
 current_peak_ec = -float('inf')
 last_peak_log_time = datetime.now()
 
-# Camera Setup
+# Camera Setup - Improved for both Raspberry Pi Camera and USB Webcam
 camera = None
 camera_lock = threading.Lock()
+camera_initialized = False
+camera_type = "none"
 
 # Database models
 class SensorData(db.Model):
@@ -414,77 +416,189 @@ def cleanup_old_data():
         db.session.commit()
         logger.info(f"Deleted {deleted_sensor} SensorData and {deleted_peaks} PeakLog entries.")
 
-# Camera Functions
+# Improved Camera Functions for both Raspberry Pi Camera and USB Webcam
 def init_camera():
-    """Initialize the Raspberry Pi camera"""
-    global camera
+    """Initialize camera with support for both Raspberry Pi Camera and USB Webcam"""
+    global camera, camera_initialized, camera_type
+    
+    # Reset camera state
+    camera_initialized = False
+    camera = None
+    camera_type = "none"
+    
+    # Method 1: Try Raspberry Pi Camera (picamera2)
     try:
-        # Try picamera2 first (recommended for Raspberry Pi)
         from picamera2 import Picamera2
         camera = Picamera2()
-        
-        # Configure video stream for live preview
-        video_config = camera.create_video_configuration(
-            main={"size": (640, 480)},
-            controls={"FrameRate": 25}
-        )
-        camera.configure(video_config)
+        config = camera.create_video_configuration(main={"size": (640, 480)})
+        camera.configure(config)
         camera.start()
-        logger.info("Raspberry Pi camera (picamera2) initialized successfully")
+        time.sleep(2)  # Camera warm-up
+        camera_initialized = True
+        camera_type = "picamera2"
+        logger.info("✅ Raspberry Pi Camera (picamera2) initialized successfully")
         return True
     except ImportError:
-        logger.warning("picamera2 not available, trying OpenCV fallback")
-        try:
-            # Fallback to OpenCV
-            camera = cv2.VideoCapture(0)
-            camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-            camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-            camera.set(cv2.CAP_PROP_FPS, 25)
-            logger.info("Camera fallback to OpenCV successful")
-            return True
-        except Exception as e:
-            logger.error(f"OpenCV camera also failed: {str(e)}")
-            return False
+        logger.info("picamera2 not available in virtual environment")
     except Exception as e:
-        logger.error(f"Failed to initialize picamera2: {str(e)}")
-        return False
+        logger.warning(f"picamera2 failed: {str(e)}")
+    
+    # Method 2: Try Legacy Raspberry Pi Camera (picamera)
+    try:
+        import picamera
+        camera = picamera.PiCamera()
+        camera.resolution = (640, 480)
+        camera.framerate = 20
+        time.sleep(2)  # Camera warm-up
+        camera_initialized = True
+        camera_type = "picamera"
+        logger.info("✅ Legacy Raspberry Pi Camera (picamera) initialized successfully")
+        return True
+    except ImportError:
+        logger.info("picamera not available in virtual environment")
+    except Exception as e:
+        logger.warning(f"picamera failed: {str(e)}")
+    
+    # Method 3: Try USB Webcam with OpenCV (Primary fallback)
+    logger.info("Attempting to initialize USB Webcam...")
+    
+    # Try different camera indices with better detection
+    camera_indices = [0, 1, 2, 3, 4]  # Try more indices
+    backend_preferences = [cv2.CAP_V4L2, cv2.CAP_ANY]  # Prefer V4L2 backend on Raspberry Pi
+    
+    for backend in backend_preferences:
+        for i in camera_indices:
+            try:
+                logger.info(f"Trying camera index {i} with backend {backend}")
+                camera = cv2.VideoCapture(i, backend)
+                
+                if camera.isOpened():
+                    # Set camera properties
+                    camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                    camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                    camera.set(cv2.CAP_PROP_FPS, 20)
+                    camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce buffer to minimize latency
+                    
+                    # Test if we can actually read from this camera
+                    ret, frame = camera.read()
+                    if ret and frame is not None:
+                        logger.info(f"✅ USB Webcam (index {i}, backend {backend}) initialized successfully")
+                        logger.info(f"Frame dimensions: {frame.shape}")
+                        camera_initialized = True
+                        camera_type = f"usb_webcam_{i}"
+                        return True
+                    else:
+                        logger.warning(f"Camera index {i} opened but cannot read frames")
+                        camera.release()
+                        camera = None
+                else:
+                    logger.info(f"Camera index {i} not available with backend {backend}")
+                    
+            except Exception as e:
+                logger.warning(f"USB Webcam index {i} failed: {str(e)}")
+                if camera:
+                    camera.release()
+                    camera = None
+    
+    # If all methods fail
+    logger.warning("❌ All camera initialization methods failed")
+    camera = None
+    camera_initialized = False
+    camera_type = "none"
+    return False
+
+def generate_placeholder_frame(error_msg=None):
+    """Generate a placeholder frame when camera is unavailable"""
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    
+    # Add background gradient (blue water theme)
+    for y in range(480):
+        color = int(50 + (y / 480) * 50)
+        cv2.line(frame, (0, y), (640, y), (color, color, 100), 1)
+    
+    # Add text
+    cv2.putText(frame, "AQUATIC DRONE CAMERA", (120, 150), 
+               cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+    
+    if error_msg:
+        cv2.putText(frame, "Camera Feed Unavailable", (180, 200), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+        cv2.putText(frame, f"Error: {error_msg[:40]}...", (150, 230), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
+    else:
+        cv2.putText(frame, "Camera Initializing...", (200, 200), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+    
+    # Add timestamp
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cv2.putText(frame, timestamp, (220, 250), 
+               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (150, 150, 150), 1)
+    
+    # Add Raspberry Pi logo/indicator
+    cv2.putText(frame, "Raspberry Pi", (260, 280), 
+               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100, 200, 255), 1)
+    
+    ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+    return buffer.tobytes()
 
 def generate_frames():
-    """Generate camera frames for streaming"""
-    global camera
+    """Generate camera frames with robust error handling"""
+    global camera, camera_initialized, camera_type
+    
     frame_count = 0
     last_time = time.time()
+    consecutive_failures = 0
+    max_consecutive_failures = 5
     
     while True:
         try:
             frame = None
             
-            # Check if we're using picamera2
-            if camera and hasattr(camera, 'capture_array'):
-                # picamera2 method
-                with camera_lock:
-                    frame = camera.capture_array()
-                
-                # picamera2 returns RGB, convert to BGR for OpenCV
-                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-                
-            elif camera and hasattr(camera, 'read'):
-                # OpenCV method (fallback)
-                with camera_lock:
-                    success, frame = camera.read()
-                if not success:
+            # USB Webcam method (OpenCV)
+            if "usb_webcam" in camera_type and hasattr(camera, 'read'):
+                try:
+                    with camera_lock:
+                        # Sometimes we need to grab multiple times to clear buffer
+                        for _ in range(2):
+                            camera.grab()
+                        success, frame = camera.retrieve()
+                        
+                    if not success or frame is None:
+                        consecutive_failures += 1
+                        logger.warning(f"Failed to read frame from USB webcam (attempt {consecutive_failures})")
+                        if consecutive_failures >= max_consecutive_failures:
+                            logger.error("Too many consecutive failures, reinitializing camera")
+                            init_camera()  # Try to reinitialize
+                            consecutive_failures = 0
+                        frame = None
+                    else:
+                        consecutive_failures = 0  # Reset on success
+                        
+                except Exception as e:
+                    logger.error(f"USB Webcam read error: {str(e)}")
                     frame = None
-                    
+                    consecutive_failures += 1
+            
+            # Process frame if available
             if frame is not None:
-                # Add timestamp to frame
+                # Add timestamp and info to frame
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                cv2.putText(frame, f"Drone Camera - {timestamp}", (10, 30), 
+                cv2.putText(frame, f"Aquatic Drone - {timestamp}", (10, 30), 
                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
                 
-                # Encode frame as JPEG
+                # Add camera type info
+                cv2.putText(frame, f"Camera: {camera_type}", (10, 60), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+                
+                # Add status info
+                cv2.putText(frame, "Status: LIVE", (10, 90), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+                
+                # Encode as JPEG
                 ret, buffer = cv2.imencode('.jpg', frame, [
-                    cv2.IMWRITE_JPEG_QUALITY, 80
+                    cv2.IMWRITE_JPEG_QUALITY, 80  # Good quality for webcam
                 ])
+                
                 if ret:
                     frame_bytes = buffer.tobytes()
                     yield (b'--frame\r\n'
@@ -495,39 +609,26 @@ def generate_frames():
                     current_time = time.time()
                     if current_time - last_time >= 10.0:  # Log every 10 seconds
                         fps = frame_count / (current_time - last_time)
-                        logger.info(f"Camera streaming at {fps:.1f} FPS")
+                        logger.info(f"Camera streaming at {fps:.1f} FPS - {camera_type}")
                         frame_count = 0
                         last_time = current_time
-                        
+                else:
+                    raise Exception("Frame encoding failed")
+                    
             else:
-                # Create a placeholder frame when camera is not available
-                frame = np.zeros((480, 640, 3), dtype=np.uint8)
-                cv2.putText(frame, "Raspberry Pi Camera Feed", (120, 200), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-                cv2.putText(frame, "Initializing...", (250, 240), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                cv2.putText(frame, timestamp, (200, 280), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (150, 150, 150), 1)
-                ret, buffer = cv2.imencode('.jpg', frame)
-                frame_bytes = buffer.tobytes()
+                # Create placeholder frame when no camera available
+                frame_bytes = generate_placeholder_frame("No frame received from camera")
                 yield (b'--frame\r\n'
                        b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
                 
         except Exception as e:
-            logger.error(f"Error in frame generation: {str(e)}")
-            # Create error frame
-            frame = np.zeros((480, 640, 3), dtype=np.uint8)
-            cv2.putText(frame, "Camera Error - Check Connection", (80, 220), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-            cv2.putText(frame, str(e)[:100], (50, 260), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
-            ret, buffer = cv2.imencode('.jpg', frame)
-            frame_bytes = buffer.tobytes()
+            logger.error(f"Frame generation error: {str(e)}")
+            frame_bytes = generate_placeholder_frame(error_msg=str(e))
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
         
-        time.sleep(0.04)  # ~25 FPS
+        # Control frame rate
+        time.sleep(0.033)  # ~30 FPS
 
 # Routes
 @app.route('/')
@@ -669,25 +770,44 @@ def manual_reconnect():
 @app.route('/api/camera-status')
 def camera_status():
     """API endpoint to check camera status"""
-    global camera
-    status = "unknown"
-    camera_type = "none"
+    global camera, camera_initialized, camera_type
     
-    if camera is None:
+    status = "unknown"
+    details = ""
+    
+    if not camera_initialized:
         status = "not_initialized"
-    elif hasattr(camera, 'started') and camera.started:
+        details = "Camera not initialized"
+    elif camera_type == "picamera2" and hasattr(camera, 'started') and camera.started:
         status = "running"
-        camera_type = "picamera2"
-    elif hasattr(camera, 'isOpened') and camera.isOpened():
+        details = "Using Raspberry Pi Camera (picamera2)"
+    elif camera_type == "picamera" and hasattr(camera, '_camera'):
+        status = "running" 
+        details = "Using Legacy Raspberry Pi Camera (picamera)"
+    elif "usb_webcam" in camera_type and hasattr(camera, 'isOpened') and camera.isOpened():
         status = "running"
-        camera_type = "opencv"
+        details = f"Using USB Webcam ({camera_type})"
     else:
         status = "error"
+        details = "Camera initialized but not functioning properly"
     
     return jsonify({
         'status': status,
-        'type': camera_type
+        'type': camera_type,
+        'initialized': camera_initialized,
+        'details': details
     })
+
+# Manual camera reconnect endpoint
+@app.route('/api/reconnect-camera')
+def manual_camera_reconnect():
+    """Manual camera reconnection endpoint"""
+    global camera_initialized
+    success = init_camera()
+    if success:
+        return jsonify({'status': 'success', 'message': f'Camera reconnected: {camera_type}'})
+    else:
+        return jsonify({'status': 'error', 'message': 'Failed to reconnect camera'})
 
 @app.route('/video_feed')
 def video_feed():
@@ -705,12 +825,12 @@ if __name__ == '__main__':
             logger.info("Using existing database")
         initialize_from_database()
     
-    # Initialize camera
+    # Initialize camera with improved error handling
     camera_init_success = init_camera()
     if camera_init_success:
-        logger.info("Camera initialized successfully - live feed available")
+        logger.info(f"✅ Camera initialized successfully: {camera_type}")
     else:
-        logger.warning("Camera initialization failed - video feed will show placeholder")
+        logger.warning("⚠️ Camera initialization failed - video feed will show placeholder")
     
     connect_to_arduino()
     threading.Thread(target=serial_reader, daemon=True).start()
