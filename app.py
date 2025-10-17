@@ -30,7 +30,7 @@ CONDUCTIVITY_THRESHOLD = 8.0  # mS/cm (salinity change)
 BALLAST_ALERT_THRESHOLD = 3  # NEW: Minimum sensors that must exceed thresholds
 
 # Serial Setup
-SERIAL_PORT = 'COM8'
+SERIAL_PORT = 'COM5'
 BAUD_RATE = 9600
 ser = None
 arduino_connected = False
