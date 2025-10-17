@@ -909,7 +909,7 @@
         <h2 class="section-title">Real-Time Sensor Values <span class="status-indicator"></span></h2>
         <div class="sensor-cards">
             <div class="card" id="tempCard">
-                <div class="threshold-indicator" id="tempThresholdIndicator"></div>
+                <div class="threshold-indicator" id="temperatureThresholdIndicator"></div>
                 <h3><span><i class="fas fa-thermometer-half"></i></span> Temperature</h3>
                 <p class="value" id="tempValue">-- °C</p>
                 <p class="sub-value">Optimal: 26-29°C</p>
@@ -934,7 +934,7 @@
                 <p class="sub-value">Optimal: 6.5-8.5</p>
             </div>
             <div class="card" id="doCard">
-                <div class="threshold-indicator" id="doThresholdIndicator"></div>
+                <div class="threshold-indicator" id="dissolved_oxygenThresholdIndicator"></div>
                 <h3><span><i class="fas fa-wind"></i></span> Dissolved Oxygen</h3>
                 <p class="value" id="doValue">-- mg/L</p>
                 <p class="sub-value">Optimal: >5.0 mg/L</p>
@@ -1358,11 +1358,17 @@
                         exceededCount++;
                         exceededSensors.push(sensor);
                         
-                        // Update card indicator
+                        // Update card indicator for ALL sensors
                         const indicator = document.getElementById(`${sensor.id}ThresholdIndicator`);
                         if (indicator) {
                             indicator.style.display = 'block';
-                            document.getElementById(`${sensor.id}Card`).classList.add('alert-card');
+                            // Use the correct card ID for each sensor
+                            let cardId = `${sensor.id}Card`;
+                            // Handle dissolved_oxygen -> do mapping
+                            if (sensor.id === 'dissolved_oxygen') {
+                                cardId = 'doCard';
+                            }
+                            document.getElementById(cardId).classList.add('alert-card');
                         }
                     } else {
                         // Remove individual alerts
@@ -1372,11 +1378,17 @@
                             delete activeAlerts[sensor.id];
                         }
                         
-                        // Update card indicator
+                        // Update card indicator for ALL sensors
                         const indicator = document.getElementById(`${sensor.id}ThresholdIndicator`);
                         if (indicator) {
                             indicator.style.display = 'none';
-                            document.getElementById(`${sensor.id}Card`).classList.remove('alert-card');
+                            // Use the correct card ID for each sensor
+                            let cardId = `${sensor.id}Card`;
+                            // Handle dissolved_oxygen -> do mapping
+                            if (sensor.id === 'dissolved_oxygen') {
+                                cardId = 'doCard';
+                            }
+                            document.getElementById(cardId).classList.remove('alert-card');
                         }
                     }
                 }
@@ -1391,6 +1403,8 @@
                 let sensorList = exceededSensors.map(s => {
                     if (s.comparison === 'range') {
                         return `<div>• ${s.name}: ${s.value.toFixed(2)} outside ${thresholds.ph_low}-${thresholds.ph_high}</div>`;
+                    } else if (s.comparison === '<') {
+                        return `<div>• ${s.name}: ${s.value.toFixed(2)} ${s.unit} ${s.comparison} ${s.threshold} ${s.unit}</div>`;
                     } else {
                         return `<div>• ${s.name}: ${s.value.toFixed(2)} ${s.unit} ${s.comparison} ${s.threshold} ${s.unit}</div>`;
                     }
@@ -1420,7 +1434,13 @@
                     const indicator = document.getElementById(`${sensor.id}ThresholdIndicator`);
                     if (indicator) {
                         indicator.style.display = 'none';
-                        document.getElementById(`${sensor.id}Card`).classList.remove('alert-card');
+                        // Use the correct card ID for each sensor
+                        let cardId = `${sensor.id}Card`;
+                        // Handle dissolved_oxygen -> do mapping
+                        if (sensor.id === 'dissolved_oxygen') {
+                            cardId = 'doCard';
+                        }
+                        document.getElementById(cardId).classList.remove('alert-card');
                     }
                 });
             }
@@ -1439,7 +1459,13 @@
                             const indicator = document.getElementById(`${sensor.id}ThresholdIndicator`);
                             if (indicator) {
                                 indicator.style.display = 'none';
-                                document.getElementById(`${sensor.id}Card`).classList.remove('alert-card');
+                                // Use the correct card ID for each sensor
+                                let cardId = `${sensor.id}Card`;
+                                // Handle dissolved_oxygen -> do mapping
+                                if (sensor.id === 'dissolved_oxygen') {
+                                    cardId = 'doCard';
+                                }
+                                document.getElementById(cardId).classList.remove('alert-card');
                             }
                         });
                     }
