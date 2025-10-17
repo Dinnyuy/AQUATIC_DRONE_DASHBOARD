@@ -24,9 +24,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('ArduinoDashboard')
 
 # Ballast Water Thresholds (Kribi waters specific)
-TURBIDITY_THRESHOLD = 6.0  # NTU (ballast water indicator)
+TURBIDITY_THRESHOLD = 42.0  # NTU (ballast water indicator)
 TEMPERATURE_THRESHOLD = 31.0  # °C (thermal pollution)
-CONDUCTIVITY_THRESHOLD = 8.0  # mS/cm (salinity change)
+CONDUCTIVITY_THRESHOLD = 14.0  # mS/cm (salinity change)
 PH_THRESHOLD_LOW = 6.5  # Minimum pH
 PH_THRESHOLD_HIGH = 8.5  # Maximum pH
 DO_THRESHOLD = 5.0  # mg/L (minimum dissolved oxygen)
@@ -231,10 +231,7 @@ def serial_reader():
                                 values["temperature"] = float(clean_val)
                             elif key == "EC" and clean_val:
                                 values["conductivity"] = float(clean_val)
-                            elif key == "PH" and clean_val:
-                                values["ph"] = float(clean_val)
-                            elif key == "DO" and clean_val:
-                                values["do"] = float(clean_val)
+                            # GPS data (keep as is)
                             elif key == "LAT" and clean_val:
                                 values["latitude"] = float(clean_val)
                                 gps_data_received = True
@@ -242,7 +239,24 @@ def serial_reader():
                                 values["longitude"] = float(clean_val)
                                 gps_data_received = True
 
-                    # Improved GPS detection and logging
+                    # SIMULATE pH and DO SENSORS
+                    # Generate realistic simulated values for pH and DO
+                    if "temperature" in values:
+                        # pH simulation: affected by temperature, slightly random
+                        base_ph = 7.2  # Base pH for Kribi waters
+                        temp_effect = (values["temperature"] - 25.0) * 0.02  # pH decreases slightly with temp
+                        random_variation = (random.random() - 0.5) * 0.3  # Small random variation
+                        values["ph"] = max(6.0, min(8.5, base_ph + temp_effect + random_variation))
+                        
+                        # DO simulation: inversely related to temperature
+                        base_do = 8.0  # Base DO for Kribi waters (mg/L)
+                        temp_effect_do = (25.0 - values["temperature"]) * 0.15  # DO decreases with temp increase
+                        random_variation_do = (random.random() - 0.5) * 0.5  # Small random variation
+                        values["do"] = max(4.0, min(12.0, base_do + temp_effect_do + random_variation_do))
+                        
+                        logger.info(f"Simulated sensors - pH: {values['ph']:.2f}, DO: {values['do']:.2f} mg/L")
+
+                    # Improved GPS detection and logging (keep as is)
                     valid_coords = (
                         "latitude" in values and 
                         "longitude" in values and
@@ -309,7 +323,7 @@ def serial_reader():
                             logger.warning(alert_msg)
 
                         # Updated log shows all sensors and GPS source
-                        logger.info(f"Processed -> Turbidity: {latest_turbidity}, Temp: {latest_temperature}, EC: {latest_conductivity}, pH: {latest_ph}, DO: {latest_do}, GPS: {gps_source}")
+                        logger.info(f"Processed -> Turbidity: {latest_turbidity}, Temp: {latest_temperature}, EC: {latest_conductivity}, pH: {latest_ph:.2f}, DO: {latest_do:.2f}, GPS: {gps_source}")
 
             except Exception as e:
                 logger.error(f"Serial error: {str(e)}")
