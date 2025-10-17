@@ -196,6 +196,8 @@
         .card:nth-child(2)::before { background: linear-gradient(90deg, #2196F3, #81D4FA); }
         .card:nth-child(3)::before { background: linear-gradient(90deg, #4CAF50, #81C784); }
         .card:nth-child(4)::before { background: linear-gradient(90deg, #FF9800, #FFCC80); }
+        .card:nth-child(5)::before { background: linear-gradient(90deg, #9C27B0, #CE93D8); }
+        .card:nth-child(6)::before { background: linear-gradient(90deg, #795548, #A1887F); }
         
         .turbidity-card {
             position: relative;
@@ -346,7 +348,7 @@
         .camera-feed {
             width: 100%;
             height: 100%;
-            object-fit: cover; /* Best option - fills container while maintaining aspect ratio */
+            object-fit: cover;
             display: block;
         }
         
@@ -768,13 +770,13 @@
         /* ALERT CONTAINER POSITION */
         #alert-container {
             position: fixed;
-            top: 120px; /* Below the header */
-            right: 20px; /* Position from right edge */
+            top: 120px;
+            right: 20px;
             z-index: 1000;
-            max-width: 400px; /* Optimal width for graph area */
+            max-width: 400px;
             display: flex;
             flex-direction: column;
-            gap: 10px; /* Space between alerts */
+            gap: 10px;
         }
         
         .alert-notification {
@@ -924,6 +926,19 @@
                 <p class="value" id="conductivityValue">-- mS/cm</p>
                 <p class="sub-value">(Salinity: <span id="salinityValue">-- PSU</span>)</p>
             </div>
+            <!-- NEW SENSOR CARDS -->
+            <div class="card" id="phCard">
+                <div class="threshold-indicator" id="phThresholdIndicator"></div>
+                <h3><span><i class="fas fa-vial"></i></span> pH Level</h3>
+                <p class="value" id="phValue">--</p>
+                <p class="sub-value">Optimal: 6.5-8.5</p>
+            </div>
+            <div class="card" id="doCard">
+                <div class="threshold-indicator" id="doThresholdIndicator"></div>
+                <h3><span><i class="fas fa-wind"></i></span> Dissolved Oxygen</h3>
+                <p class="value" id="doValue">-- mg/L</p>
+                <p class="sub-value">Optimal: >5.0 mg/L</p>
+            </div>
             <div class="card">
                 <h3><span><i class="fas fa-map-marker-alt"></i></span> GPS Position</h3>
                 <p class="value" id="gpsValue">--, --</p>
@@ -948,6 +963,8 @@
                             <th>Peak Temperature (°C)</th>
                             <th>Conductivity (mS/cm)</th>
                             <th>Turbidity (NTU)</th>
+                            <th>pH Level</th>
+                            <th>Dissolved Oxygen (mg/L)</th>
                             <th>GPS Location</th>
                         </tr>
                     </thead>
@@ -1015,6 +1032,8 @@
                                 <th>Temperature (°C)</th>
                                 <th>Turbidity (NTU)</th>
                                 <th>EC (mS/cm)</th>
+                                <th>pH Level</th>
+                                <th>Dissolved Oxygen (mg/L)</th>
                                 <th>GPS Coordinates</th>
                                 <th>GPS Type</th>
                             </tr>
@@ -1070,7 +1089,7 @@
                     Loading camera status...
                 </div>
 
-                <!-- NEW: Camera Controls Section -->
+                <!-- Camera Controls Section -->
                 <h3>Camera Controls</h3>
                 <div class="serial-debug">
                     <button class="reconnect-btn" onclick="manualCameraReconnect()">
@@ -1104,6 +1123,8 @@
         const turbidityValue = document.getElementById('turbidityValue');
         const conductivityValue = document.getElementById('conductivityValue');
         const salinityValue = document.getElementById('salinityValue');
+        const phValue = document.getElementById('phValue');
+        const doValue = document.getElementById('doValue');
         const gpsValue = document.getElementById('gpsValue');
         const gpsStatus = document.getElementById('gpsStatus');
         const liveGps = document.getElementById('liveGps');
@@ -1156,20 +1177,23 @@
         let currentPeakTemp = -Infinity;
         let lastPeakLogTime = 0;
         let connectionHistoryData = [];
-        let baseLatitude = 4.2105;  // Base location for simulation
-        let baseLongitude = 6.4375; // Base location for simulation
+        let baseLatitude = 4.2105;
+        let baseLongitude = 6.4375;
         let lastRealGpsTime = 0;
-        let gpsMode = 'simulated'; // 'simulated' or 'real'
-        let lastSuccessfulUpdate = null; // Track last successful update
+        let gpsMode = 'simulated';
+        let lastSuccessfulUpdate = null;
         
-        // NEW: Thresholds for ballast water detection
+        // Thresholds for ballast water detection
         const thresholds = {
             turbidity: 5.0,
             temperature: 30.0,
-            conductivity: 2.0
+            conductivity: 2.0,
+            dissolved_oxygen: 5.0,
+            ph_low: 6.5,
+            ph_high: 8.5
         };
         
-        // NEW: Track active alerts
+        // Track active alerts
         let activeAlerts = {};
         let alertTimeout = null;
         
@@ -1185,12 +1209,12 @@
                 // Update connection info
                 updateConnectionInfo(data);
                 
-                // NEW: Update thresholds from backend
+                // Update thresholds from backend
                 if (data.thresholds) {
                     Object.assign(thresholds, data.thresholds);
                 }
                 
-                // NEW: Check for threshold breaches
+                // Check for threshold breaches
                 checkThresholds(data);
                 
                 // Store last successful update time
@@ -1227,6 +1251,12 @@
             if (data.conductivity !== null) {
                 conductivityValue.textContent = `${parseFloat(data.conductivity).toFixed(2)} mS/cm`;
                 salinityValue.textContent = `${(parseFloat(data.conductivity) * 0.64).toFixed(2)} PSU`;
+            }
+            if (data.ph !== null) {
+                phValue.textContent = parseFloat(data.ph).toFixed(2);
+            }
+            if (data.do !== null) {
+                doValue.textContent = `${parseFloat(data.do).toFixed(2)} mg/L`;
             }
             
             // Update GPS - with simulation/real-time switching logic
@@ -1288,12 +1318,12 @@
             systemStatus.style.color = data.connected ? '#4CAF50' : '#f44336';
         }
         
-        // NEW: Check for threshold breaches (requires at least two sensors)
+        // Check for threshold breaches (requires at least two sensors)
         function checkThresholds(data) {
             const now = Date.now();
             
             // Clear previous alerts if no breaches
-            if (!data.turbidity && !data.temperature && !data.conductivity) {
+            if (!data.turbidity && !data.temperature && !data.conductivity && !data.ph && !data.do) {
                 alertContainer.innerHTML = '';
                 activeAlerts = {};
                 return;
@@ -1301,9 +1331,11 @@
             
             // Check each sensor
             const sensors = [
-                { id: 'turbidity', value: data.turbidity, threshold: thresholds.turbidity, name: 'Turbidity', unit: 'NTU' },
-                { id: 'temperature', value: data.temperature, threshold: thresholds.temperature, name: 'Temperature', unit: '°C' },
-                { id: 'conductivity', value: data.conductivity, threshold: thresholds.conductivity, name: 'Conductivity', unit: 'mS/cm' }
+                { id: 'turbidity', value: data.turbidity, threshold: thresholds.turbidity, name: 'Turbidity', unit: 'NTU', comparison: '>' },
+                { id: 'temperature', value: data.temperature, threshold: thresholds.temperature, name: 'Temperature', unit: '°C', comparison: '>' },
+                { id: 'conductivity', value: data.conductivity, threshold: thresholds.conductivity, name: 'Conductivity', unit: 'mS/cm', comparison: '>' },
+                { id: 'dissolved_oxygen', value: data.do, threshold: thresholds.dissolved_oxygen, name: 'Dissolved Oxygen', unit: 'mg/L', comparison: '<' },
+                { id: 'ph', value: data.ph, threshold: thresholds.ph_low, name: 'pH', unit: '', comparison: 'range' }
             ];
             
             // Count how many thresholds are exceeded
@@ -1311,42 +1343,58 @@
             let exceededSensors = [];
             
             sensors.forEach(sensor => {
-                if (sensor.value !== null && sensor.value > sensor.threshold) {
-                    exceededCount++;
-                    exceededSensors.push(sensor);
-                    
-                    // Update card indicator
-                    const indicator = document.getElementById(`${sensor.id}ThresholdIndicator`);
-                    if (indicator) {
-                        indicator.style.display = 'block';
-                        document.getElementById(`${sensor.id}Card`).classList.add('alert-card');
-                    }
-                } else {
-                    // Remove individual alerts
-                    if (activeAlerts[sensor.id]) {
-                        const alertEl = document.getElementById(`alert-${sensor.id}`);
-                        if (alertEl) alertEl.remove();
-                        delete activeAlerts[sensor.id];
+                let isExceeded = false;
+                
+                if (sensor.value !== null) {
+                    if (sensor.comparison === '>') {
+                        isExceeded = sensor.value > sensor.threshold;
+                    } else if (sensor.comparison === '<') {
+                        isExceeded = sensor.value < sensor.threshold;
+                    } else if (sensor.comparison === 'range') {
+                        isExceeded = sensor.value < thresholds.ph_low || sensor.value > thresholds.ph_high;
                     }
                     
-                    // Update card indicator
-                    const indicator = document.getElementById(`${sensor.id}ThresholdIndicator`);
-                    if (indicator) {
-                        indicator.style.display = 'none';
-                        document.getElementById(`${sensor.id}Card`).classList.remove('alert-card');
+                    if (isExceeded) {
+                        exceededCount++;
+                        exceededSensors.push(sensor);
+                        
+                        // Update card indicator
+                        const indicator = document.getElementById(`${sensor.id}ThresholdIndicator`);
+                        if (indicator) {
+                            indicator.style.display = 'block';
+                            document.getElementById(`${sensor.id}Card`).classList.add('alert-card');
+                        }
+                    } else {
+                        // Remove individual alerts
+                        if (activeAlerts[sensor.id]) {
+                            const alertEl = document.getElementById(`alert-${sensor.id}`);
+                            if (alertEl) alertEl.remove();
+                            delete activeAlerts[sensor.id];
+                        }
+                        
+                        // Update card indicator
+                        const indicator = document.getElementById(`${sensor.id}ThresholdIndicator`);
+                        if (indicator) {
+                            indicator.style.display = 'none';
+                            document.getElementById(`${sensor.id}Card`).classList.remove('alert-card');
+                        }
                     }
                 }
             });
             
-            // NEW: Show combined alert if at least two sensors exceed thresholds
+            // Show combined alert if at least two sensors exceed thresholds
             if (exceededCount >= 2 && !activeAlerts['ballast']) {
                 const alertDiv = document.createElement('div');
                 alertDiv.className = 'combined-alert';
                 alertDiv.id = 'alert-ballast';
                 
-                let sensorList = exceededSensors.map(s => 
-                    `<div>• ${s.name}: ${s.value.toFixed(2)} ${s.unit} > ${s.threshold} ${s.unit}</div>`
-                ).join('');
+                let sensorList = exceededSensors.map(s => {
+                    if (s.comparison === 'range') {
+                        return `<div>• ${s.name}: ${s.value.toFixed(2)} outside ${thresholds.ph_low}-${thresholds.ph_high}</div>`;
+                    } else {
+                        return `<div>• ${s.name}: ${s.value.toFixed(2)} ${s.unit} ${s.comparison} ${s.threshold} ${s.unit}</div>`;
+                    }
+                }).join('');
                 
                 alertDiv.innerHTML = `
                     <button class="alert-close" onclick="this.parentElement.remove(); delete activeAlerts['ballast'];">
@@ -1451,6 +1499,28 @@
                         color: data.map(p => p.above_threshold ? '#FF5722' : '#4CAF50')
                     }
                 },
+                { 
+                    x: times, 
+                    y: data.map(p => p.ph), 
+                    name: 'pH', 
+                    line: { color: '#9C27B0' }, 
+                    mode: 'lines+markers',
+                    marker: {
+                        size: 8,
+                        color: data.map(p => p.above_threshold ? '#FF5722' : '#9C27B0')
+                    }
+                },
+                { 
+                    x: times, 
+                    y: data.map(p => p.do), 
+                    name: 'Dissolved Oxygen', 
+                    line: { color: '#795548' }, 
+                    mode: 'lines+markers',
+                    marker: {
+                        size: 8,
+                        color: data.map(p => p.above_threshold ? '#FF5722' : '#795548')
+                    }
+                },
                 // Threshold lines
                 {
                     x: times,
@@ -1487,6 +1557,42 @@
                     },
                     mode: 'lines',
                     showlegend: true
+                },
+                {
+                    x: times,
+                    y: Array(times.length).fill(thresholds.dissolved_oxygen),
+                    name: 'DO Threshold',
+                    line: {
+                        color: '#795548',
+                        width: 2,
+                        dash: 'dash'
+                    },
+                    mode: 'lines',
+                    showlegend: true
+                },
+                {
+                    x: times,
+                    y: Array(times.length).fill(thresholds.ph_low),
+                    name: 'pH Low Threshold',
+                    line: {
+                        color: '#9C27B0',
+                        width: 2,
+                        dash: 'dash'
+                    },
+                    mode: 'lines',
+                    showlegend: true
+                },
+                {
+                    x: times,
+                    y: Array(times.length).fill(thresholds.ph_high),
+                    name: 'pH High Threshold',
+                    line: {
+                        color: '#7B1FA2',
+                        width: 2,
+                        dash: 'dash'
+                    },
+                    mode: 'lines',
+                    showlegend: true
                 }
             ], {
                 title: 'Sensor Trends Over Time',
@@ -1497,7 +1603,9 @@
                         50, 
                         ...data.map(p => p.turbidity),
                         ...data.map(p => p.temperature),
-                        ...data.map(p => p.conductivity)
+                        ...data.map(p => p.conductivity),
+                        ...data.map(p => p.ph),
+                        ...data.map(p => p.do)
                     )],
                     dtick: 5
                 },
@@ -1536,6 +1644,8 @@
                     <td>${log.temperature}</td>
                     <td>${log.turbidity}</td>
                     <td>${log.ec}</td>
+                    <td>${log.ph}</td>
+                    <td>${log.do}</td>
                     <td>${log.latitude}, ${log.longitude}</td>
                     <td>${gpsType}</td>
                 `;
@@ -1590,12 +1700,12 @@
                 
                 const logs = await response.json();
                 
-                let csvContent = "Time,Temperature (°C),Turbidity (NTU),EC (mS/cm),Latitude,Longitude,Type\n";
+                let csvContent = "Time,Temperature (°C),Turbidity (NTU),EC (mS/cm),pH Level,Dissolved Oxygen (mg/L),Latitude,Longitude,Type\n";
                 
                 logs.forEach(log => {
                     const date = new Date(log.time);
                     const gpsType = log.latitude > 4.2 && log.latitude < 4.3 ? 'simulated' : 'real';
-                    csvContent += `"${date.toLocaleString()}","${log.temperature}","${log.turbidity}","${log.ec}","${log.latitude}","${log.longitude}","${gpsType}"\n`;
+                    csvContent += `"${date.toLocaleString()}","${log.temperature}","${log.turbidity}","${log.ec}","${log.ph}","${log.do}","${log.latitude}","${log.longitude}","${gpsType}"\n`;
                 });
                 
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -1670,6 +1780,8 @@
                     `EC: ${data.conductivity[i].toFixed(2)} mS/cm<br>` +
                     `Temp: ${data.temperature[i].toFixed(2)}°C<br>` +
                     `Turbidity: ${data.turbidity[i].toFixed(2)} NTU<br>` +
+                    `pH: ${data.ph[i].toFixed(2)}<br>` +
+                    `DO: ${data.do[i].toFixed(2)} mg/L<br>` +
                     `Location: ${data.latitudes[i].toFixed(6)}, ${data.longitudes[i].toFixed(6)}`
                 )
             };
@@ -1715,7 +1827,7 @@
             }
         }
         
-        // Check camera status - UPDATED VERSION
+        // Check camera status
         async function checkCameraStatus() {
             try {
                 const response = await fetch('/api/camera-status');
@@ -1738,7 +1850,6 @@
                 }
                 
                 if (cameraType) {
-                    // Show detailed camera type information
                     let cameraTypeText = '';
                     if (data.type === 'picamera2') {
                         cameraTypeText = '(Raspberry Pi Camera)';
@@ -1774,7 +1885,7 @@
             }
         }
         
-        // Manual camera reconnect - NEW FUNCTION
+        // Manual camera reconnect
         async function manualCameraReconnect() {
             const statusElement = document.getElementById('cameraReconnectStatus');
             
@@ -1817,13 +1928,12 @@
             }
         }
         
-        // Handle camera feed errors - NEW FUNCTION
+        // Handle camera feed errors
         function handleCameraFeedError() {
             const cameraFeed = document.querySelector('.camera-feed');
             if (cameraFeed) {
                 cameraFeed.onerror = function() {
                     console.error('Camera feed error');
-                    // You could show a placeholder image or message here
                     if (cameraStatusText) {
                         cameraStatusText.innerHTML = '<i class="fas fa-circle" style="color: #f44336"></i> Camera: Feed Error';
                         cameraStatusText.style.color = '#f44336';
@@ -1832,7 +1942,6 @@
                 
                 cameraFeed.onload = function() {
                     console.log('Camera feed loaded successfully');
-                    // Feed is working, status will be updated by checkCameraStatus
                 };
             }
         }
@@ -1882,7 +1991,7 @@
             }
         }
         
-        // Initialize dashboard - UPDATED VERSION
+        // Initialize dashboard
         async function initializeDashboard() {
             // Set default dates for log filters
             const today = new Date();
@@ -1899,14 +2008,14 @@
             await fetchAndPopulateLogs();
             await updateSerialDebugInfo();
             await checkCameraStatus();
-            handleCameraFeedError(); // Add this line
+            handleCameraFeedError();
             
             // Start periodic updates
             setInterval(fetchRealTimeData, 2000);
             setInterval(fetchHistoricalData, 10000);
-            setInterval(update3dPeakGraph, 300000); // Update every 5 minutes
-            setInterval(updateSerialDebugInfo, 5000); // Update debug info every 5 seconds
-            setInterval(checkCameraStatus, 10000); // Check camera status every 10 seconds
+            setInterval(update3dPeakGraph, 300000);
+            setInterval(updateSerialDebugInfo, 5000);
+            setInterval(checkCameraStatus, 10000);
         }
         
         // Initialize when page loads

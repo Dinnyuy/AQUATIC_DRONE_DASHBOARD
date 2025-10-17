@@ -27,7 +27,10 @@ logger = logging.getLogger('ArduinoDashboard')
 TURBIDITY_THRESHOLD = 6.0  # NTU (ballast water indicator)
 TEMPERATURE_THRESHOLD = 31.0  # °C (thermal pollution)
 CONDUCTIVITY_THRESHOLD = 8.0  # mS/cm (salinity change)
-BALLAST_ALERT_THRESHOLD = 3  # NEW: Minimum sensors that must exceed thresholds
+PH_THRESHOLD_LOW = 6.5  # Minimum pH
+PH_THRESHOLD_HIGH = 8.5  # Maximum pH
+DO_THRESHOLD = 5.0  # mg/L (minimum dissolved oxygen)
+BALLAST_ALERT_THRESHOLD = 3  # Minimum sensors that must exceed thresholds
 
 # Serial Setup
 SERIAL_PORT = '/dev/ttyACM0'
@@ -42,6 +45,8 @@ RECONNECT_DELAY = 5  # seconds
 latest_turbidity = None
 latest_temperature = None
 latest_conductivity = None
+latest_ph = None
+latest_do = None
 latest_latitude = None
 latest_longitude = None
 
@@ -60,6 +65,8 @@ gps_mode = "simulated"
 current_peak_temp = -float('inf')
 current_peak_turbidity = -float('inf')
 current_peak_ec = -float('inf')
+current_peak_ph = -float('inf')
+current_peak_do = -float('inf')
 last_peak_log_time = datetime.now()
 
 # Camera Setup - Improved for both Raspberry Pi Camera and USB Webcam
@@ -75,6 +82,8 @@ class SensorData(db.Model):
     turbidity = db.Column(db.Float)
     temperature = db.Column(db.Float)
     conductivity = db.Column(db.Float)
+    ph = db.Column(db.Float)  # pH sensor
+    do = db.Column(db.Float)  # Dissolved Oxygen sensor
     latitude = db.Column(db.Float)
     longitude = db.Column(db.Float)
     gps_type = db.Column(db.String(20))  # 'simulated' or 'real'
@@ -86,6 +95,8 @@ class PeakLog(db.Model):
     peak_temperature = db.Column(db.Float)
     peak_turbidity = db.Column(db.Float)
     peak_ec = db.Column(db.Float)
+    peak_ph = db.Column(db.Float)  # pH peak
+    peak_do = db.Column(db.Float)  # DO peak
     latitude = db.Column(db.Float)
     longitude = db.Column(db.Float)
     gps_type = db.Column(db.String(20))
@@ -93,7 +104,8 @@ class PeakLog(db.Model):
 # Initialize from database on startup
 def initialize_from_database():
     global latest_turbidity, latest_temperature, latest_conductivity, last_update
-    global current_peak_temp, current_peak_turbidity, current_peak_ec, last_peak_log_time
+    global latest_ph, latest_do
+    global current_peak_temp, current_peak_turbidity, current_peak_ec, current_peak_ph, current_peak_do, last_peak_log_time
     global gps_fix_acquired, last_real_gps_time, gps_mode
     
     try:
@@ -103,6 +115,8 @@ def initialize_from_database():
             latest_turbidity = last_entry.turbidity
             latest_temperature = last_entry.temperature
             latest_conductivity = last_entry.conductivity
+            latest_ph = last_entry.ph
+            latest_do = last_entry.do
             last_update = last_entry.timestamp
             
             if last_entry.gps_type == 'real':
@@ -110,7 +124,7 @@ def initialize_from_database():
                 last_real_gps_time = last_entry.timestamp
                 gps_mode = "real"
             
-            logger.info(f"Initialized from DB: Turbidity={latest_turbidity}, Temp={latest_temperature}, EC={latest_conductivity}")
+            logger.info(f"Initialized from DB: Turbidity={latest_turbidity}, Temp={latest_temperature}, EC={latest_conductivity}, pH={latest_ph}, DO={latest_do}")
         
         # Get last peak log
         last_peak = PeakLog.query.order_by(PeakLog.timestamp.desc()).first()
@@ -122,18 +136,24 @@ def initialize_from_database():
             max_values = db.session.query(
                 db.func.max(SensorData.temperature),
                 db.func.max(SensorData.turbidity),
-                db.func.max(SensorData.conductivity)
+                db.func.max(SensorData.conductivity),
+                db.func.max(SensorData.ph),
+                db.func.max(SensorData.do)
             ).filter(SensorData.timestamp >= last_peak_log_time).first()
             
             if max_values[0] is not None: current_peak_temp = max_values[0]
             if max_values[1] is not None: current_peak_turbidity = max_values[1]
             if max_values[2] is not None: current_peak_ec = max_values[2]
+            if max_values[3] is not None: current_peak_ph = max_values[3]
+            if max_values[4] is not None: current_peak_do = max_values[4]
         
         if latest_temperature: current_peak_temp = max(current_peak_temp, latest_temperature)
         if latest_turbidity: current_peak_turbidity = max(current_peak_turbidity, latest_turbidity)
         if latest_conductivity: current_peak_ec = max(current_peak_ec, latest_conductivity)
+        if latest_ph: current_peak_ph = max(current_peak_ph, latest_ph)
+        if latest_do: current_peak_do = max(current_peak_do, latest_do)
         
-        logger.info(f"Initialized peaks: Temp={current_peak_temp}, Turbidity={current_peak_turbidity}, EC={current_peak_ec}")
+        logger.info(f"Initialized peaks: Temp={current_peak_temp}, Turbidity={current_peak_turbidity}, EC={current_peak_ec}, pH={current_peak_ph}, DO={current_peak_do}")
         logger.info(f"GPS mode: {gps_mode}")
     except Exception as e:
         logger.error(f"Database init error: {str(e)}")
@@ -170,6 +190,7 @@ def connect_to_arduino():
 
 def serial_reader():
     global latest_turbidity, latest_temperature, latest_conductivity, last_update
+    global latest_ph, latest_do
     global arduino_connected, ser, gps_fix_acquired, last_real_gps_time, gps_mode
     global latest_latitude, latest_longitude
 
@@ -210,6 +231,10 @@ def serial_reader():
                                 values["temperature"] = float(clean_val)
                             elif key == "EC" and clean_val:
                                 values["conductivity"] = float(clean_val)
+                            elif key == "PH" and clean_val:
+                                values["ph"] = float(clean_val)
+                            elif key == "DO" and clean_val:
+                                values["do"] = float(clean_val)
                             elif key == "LAT" and clean_val:
                                 values["latitude"] = float(clean_val)
                                 gps_data_received = True
@@ -217,7 +242,7 @@ def serial_reader():
                                 values["longitude"] = float(clean_val)
                                 gps_data_received = True
 
-                    # ====== FIXED: Improved GPS detection and logging ======
+                    # Improved GPS detection and logging
                     valid_coords = (
                         "latitude" in values and 
                         "longitude" in values and
@@ -244,24 +269,29 @@ def serial_reader():
                     else:
                         # Use cached coordinates when we have fix but no new data
                         gps_source = "real (cached)"
-                    # ====== END GPS FIX ======
 
                     if values:
                         with data_lock:
                             if "turbidity" in values: latest_turbidity = values["turbidity"]
                             if "temperature" in values: latest_temperature = values["temperature"]
                             if "conductivity" in values: latest_conductivity = values["conductivity"]
+                            if "ph" in values: latest_ph = values["ph"]
+                            if "do" in values: latest_do = values["do"]
                             if "latitude" in values: latest_latitude = values["latitude"]
                             if "longitude" in values: latest_longitude = values["longitude"]
                             last_update = datetime.now()
 
-                        # NEW: Log threshold alerts
+                        # Log threshold alerts with new sensors
                         threshold_count = 0
                         if "turbidity" in values and values["turbidity"] > TURBIDITY_THRESHOLD:
                             threshold_count += 1
                         if "temperature" in values and values["temperature"] > TEMPERATURE_THRESHOLD:
                             threshold_count += 1
                         if "conductivity" in values and values["conductivity"] > CONDUCTIVITY_THRESHOLD:
+                            threshold_count += 1
+                        if "ph" in values and (values["ph"] < PH_THRESHOLD_LOW or values["ph"] > PH_THRESHOLD_HIGH):
+                            threshold_count += 1
+                        if "do" in values and values["do"] < DO_THRESHOLD:
                             threshold_count += 1
                             
                         if threshold_count >= BALLAST_ALERT_THRESHOLD:
@@ -272,10 +302,14 @@ def serial_reader():
                                 alert_msg += f" Temperature ({values['temperature']} > {TEMPERATURE_THRESHOLD} °C)"
                             if "conductivity" in values and values["conductivity"] > CONDUCTIVITY_THRESHOLD:
                                 alert_msg += f" Conductivity ({values['conductivity']} > {CONDUCTIVITY_THRESHOLD} mS/cm)"
+                            if "ph" in values and (values["ph"] < PH_THRESHOLD_LOW or values["ph"] > PH_THRESHOLD_HIGH):
+                                alert_msg += f" pH ({values['ph']} outside {PH_THRESHOLD_LOW}-{PH_THRESHOLD_HIGH})"
+                            if "do" in values and values["do"] < DO_THRESHOLD:
+                                alert_msg += f" Dissolved Oxygen ({values['do']} < {DO_THRESHOLD} mg/L)"
                             logger.warning(alert_msg)
 
-                        # Updated log shows actual GPS source for this reading
-                        logger.info(f"Processed -> Turbidity: {latest_turbidity}, Temp: {latest_temperature}, EC: {latest_conductivity}, GPS: {gps_source}")
+                        # Updated log shows all sensors and GPS source
+                        logger.info(f"Processed -> Turbidity: {latest_turbidity}, Temp: {latest_temperature}, EC: {latest_conductivity}, pH: {latest_ph}, DO: {latest_do}, GPS: {gps_source}")
 
             except Exception as e:
                 logger.error(f"Serial error: {str(e)}")
@@ -301,6 +335,8 @@ def generate_peak_log():
             'peak_temperature': round(current_peak_temp, 2),
             'peak_turbidity': round(current_peak_turbidity, 2),
             'peak_ec': round(current_peak_ec, 2),
+            'peak_ph': round(current_peak_ph, 2),
+            'peak_do': round(current_peak_do, 2),
             'latitude': round(latitude, 6),
             'longitude': round(longitude, 6),
             'gps_type': gps_type
@@ -308,7 +344,7 @@ def generate_peak_log():
 
 # Logger every 3 seconds
 def sensor_logger():
-    global current_peak_temp, current_peak_turbidity, current_peak_ec, last_peak_log_time
+    global current_peak_temp, current_peak_turbidity, current_peak_ec, current_peak_ph, current_peak_do, last_peak_log_time
     global gps_fix_acquired, last_real_gps_time, gps_mode
     global latest_latitude, latest_longitude
 
@@ -336,7 +372,9 @@ def sensor_logger():
         with app.app_context():
             if (latest_turbidity is not None and 
                 latest_temperature is not None and 
-                latest_conductivity is not None):
+                latest_conductivity is not None and
+                latest_ph is not None and
+                latest_do is not None):
                 
                 # Use real coordinates if available
                 if gps_fix_acquired and latest_latitude and latest_longitude:
@@ -348,13 +386,17 @@ def sensor_logger():
                     longitude = BASE_LONGITUDE + (random.random() - 0.5) * 0.01
                     gps_type = "simulated"
                 
-                # NEW: Check if at least two sensors exceed thresholds
+                # Check if at least two sensors exceed thresholds
                 threshold_count = 0
                 if latest_turbidity > TURBIDITY_THRESHOLD:
                     threshold_count += 1
                 if latest_temperature > TEMPERATURE_THRESHOLD:
                     threshold_count += 1
                 if latest_conductivity > CONDUCTIVITY_THRESHOLD:
+                    threshold_count += 1
+                if latest_ph < PH_THRESHOLD_LOW or latest_ph > PH_THRESHOLD_HIGH:
+                    threshold_count += 1
+                if latest_do < DO_THRESHOLD:
                     threshold_count += 1
                     
                 above_threshold = threshold_count >= BALLAST_ALERT_THRESHOLD
@@ -363,6 +405,8 @@ def sensor_logger():
                     turbidity=round(latest_turbidity, 2),
                     temperature=round(latest_temperature, 2),
                     conductivity=round(latest_conductivity, 2),
+                    ph=round(latest_ph, 2),
+                    do=round(latest_do, 2),
                     latitude=round(latitude, 6),
                     longitude=round(longitude, 6),
                     gps_type=gps_type,
@@ -375,6 +419,8 @@ def sensor_logger():
                 current_peak_temp = max(current_peak_temp, latest_temperature)
                 current_peak_turbidity = max(current_peak_turbidity, latest_turbidity)
                 current_peak_ec = max(current_peak_ec, latest_conductivity)
+                current_peak_ph = max(current_peak_ph, latest_ph)
+                current_peak_do = max(current_peak_do, latest_do)
                 
                 # Log peak values every 5 minutes
                 now = datetime.now()
@@ -384,18 +430,22 @@ def sensor_logger():
                         peak_temperature=peak_data['peak_temperature'],
                         peak_turbidity=peak_data['peak_turbidity'],
                         peak_ec=peak_data['peak_ec'],
+                        peak_ph=peak_data['peak_ph'],
+                        peak_do=peak_data['peak_do'],
                         latitude=peak_data['latitude'],
                         longitude=peak_data['longitude'],
                         gps_type=peak_data['gps_type'],
                         timestamp=now
                     )
                     db.session.add(new_peak_entry)
-                    logger.info(f"Logged peaks: Temp={peak_data['peak_temperature']}, Turbidity={peak_data['peak_turbidity']}, EC={peak_data['peak_ec']}")
+                    logger.info(f"Logged peaks: Temp={peak_data['peak_temperature']}, Turbidity={peak_data['peak_turbidity']}, EC={peak_data['peak_ec']}, pH={peak_data['peak_ph']}, DO={peak_data['peak_do']}")
                     
                     # Reset peaks
                     current_peak_temp = -float('inf')
                     current_peak_turbidity = -float('inf')
                     current_peak_ec = -float('inf')
+                    current_peak_ph = -float('inf')
+                    current_peak_do = -float('inf')
                     last_peak_log_time = now
                 
                 db.session.commit()
@@ -642,6 +692,8 @@ def get_real_time_data():
             'turbidity': latest_turbidity,
             'temperature': latest_temperature,
             'conductivity': latest_conductivity,
+            'ph': latest_ph,
+            'do': latest_do,
             'timestamp': last_update.isoformat() if last_update else None,
             'connected': arduino_connected,
             'gps_mode': gps_mode,
@@ -652,7 +704,10 @@ def get_real_time_data():
             'thresholds': {
                 'turbidity': TURBIDITY_THRESHOLD,
                 'temperature': TEMPERATURE_THRESHOLD,
-                'conductivity': CONDUCTIVITY_THRESHOLD
+                'conductivity': CONDUCTIVITY_THRESHOLD,
+                'ph_low': PH_THRESHOLD_LOW,
+                'ph_high': PH_THRESHOLD_HIGH,
+                'dissolved_oxygen': DO_THRESHOLD
             }
         })
 
@@ -674,6 +729,8 @@ def get_historical_data():
         'turbidity': entry.turbidity,
         'temperature': entry.temperature,
         'conductivity': entry.conductivity,
+        'ph': entry.ph,
+        'do': entry.do,
         'lat': entry.latitude,
         'lon': entry.longitude,
         'gps_type': entry.gps_type,
@@ -692,6 +749,8 @@ def get_peak_logs():
         'temperature': log.peak_temperature,
         'turbidity': log.peak_turbidity,
         'ec': log.peak_ec,
+        'ph': log.peak_ph,
+        'do': log.peak_do,
         'latitude': log.latitude,
         'longitude': log.longitude,
         'gps_type': log.gps_type
@@ -706,6 +765,8 @@ def get_3d_peak_data():
     turbidity = []
     temperature = []
     conductivity = []
+    ph = []
+    do = []
     latitudes = []
     longitudes = []
     gps_types = []
@@ -715,6 +776,8 @@ def get_3d_peak_data():
         turbidity.append(log.peak_turbidity)
         temperature.append(log.peak_temperature)
         conductivity.append(log.peak_ec)
+        ph.append(log.peak_ph)
+        do.append(log.peak_do)
         latitudes.append(log.latitude)
         longitudes.append(log.longitude)
         gps_types.append(log.gps_type)
@@ -724,6 +787,8 @@ def get_3d_peak_data():
         'turbidity': turbidity,
         'temperature': temperature,
         'conductivity': conductivity,
+        'ph': ph,
+        'do': do,
         'latitudes': latitudes,
         'longitudes': longitudes,
         'gps_types': gps_types
