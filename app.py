@@ -24,11 +24,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('ArduinoDashboard')
 
 # Ballast Water Thresholds (Kribi waters specific)
-TURBIDITY_THRESHOLD = 42.0  # NTU (ballast water indicator)
-TEMPERATURE_THRESHOLD = 31.0  # °C (thermal pollution)
-CONDUCTIVITY_THRESHOLD = 14.0  # mS/cm (salinity change)
+TURBIDITY_THRESHOLD = 40.0  # NTU (ballast water indicator)
+TEMPERATURE_THRESHOLD = 29.0  # °C (thermal pollution)
+CONDUCTIVITY_THRESHOLD = 12.0  # mS/cm (salinity change)
 PH_THRESHOLD_LOW = 6.5  # Minimum pH
-PH_THRESHOLD_HIGH = 8.5  # Maximum pH
+PH_THRESHOLD_HIGH = 7.0  # Maximum pH
 DO_THRESHOLD = 5.0  # mg/L (minimum dissolved oxygen)
 BALLAST_ALERT_THRESHOLD = 3  # Minimum sensors that must exceed thresholds
 
